@@ -38,6 +38,8 @@ class AuthPillTextField extends StatelessWidget {
     this.textInputAction,
     this.maxLines = 1,
     this.inputFormatters,
+    this.onChanged,
+    this.isError = false,
   });
 
   final TextEditingController controller;
@@ -47,6 +49,8 @@ class AuthPillTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final int? maxLines;
   final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onChanged;
+  final bool isError;
 
   static const _fieldStyle = TextStyle(
     color: Color(0xFF4A4A4A),
@@ -63,13 +67,14 @@ class AuthPillTextField extends StatelessWidget {
       textInputAction: textInputAction,
       maxLines: maxLines,
       inputFormatters: inputFormatters,
+      onChanged: onChanged,
       textAlign: TextAlign.center,
       style: _fieldStyle,
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: _fieldStyle,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: isError ? const Color(0xFFFFDADA) : Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 16,
@@ -77,6 +82,14 @@ class AuthPillTextField extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(30),
           borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: Colors.transparent),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: Colors.transparent),
         ),
       ),
     );

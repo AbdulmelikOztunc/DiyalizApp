@@ -32,7 +32,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (!isAuthenticated &&
           location != '/login' &&
           location != '/register' &&
-          location != '/splash') {
+          location != '/splash' &&
+          location != '/about') {
         return '/login';
       }
 

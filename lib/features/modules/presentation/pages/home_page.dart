@@ -55,22 +55,12 @@ class HomePage extends ConsumerWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => context.push('/ask'),
-                  child: const Text('Arastirmaciya Sor'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => context.push('/about'),
-                  child: const Text('Uygulama Hakkinda'),
-                ),
-              ),
-            ],
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => context.push('/ask'),
+              child: const Text('Arastirmaciya Sor'),
+            ),
           ),
         ),
       ),

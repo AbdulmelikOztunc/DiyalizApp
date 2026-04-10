@@ -18,6 +18,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordAgainController = TextEditingController();
   final _emailController = TextEditingController();
   String? _localError;
+  bool _phoneError = false;
+  bool _passwordError = false;
+  bool _passwordAgainError = false;
+  bool _emailError = false;
 
   @override
   void dispose() {
@@ -94,6 +98,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                     AuthPillTextField(
                                       controller: _phoneController,
                                       hintText: 'Telefon Numarası',
+                                      isError: _phoneError,
+                                      onChanged: (_) {
+                                        if (_phoneError) {
+                                          setState(() => _phoneError = false);
+                                        }
+                                      },
                                       keyboardType:
                                           const TextInputType.numberWithOptions(
                                             decimal: false,
@@ -110,6 +120,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       hintText: 'Şifre',
                                       obscureText: true,
                                       textInputAction: TextInputAction.next,
+                                      isError: _passwordError,
+                                      onChanged: (_) {
+                                        if (_passwordError) {
+                                          setState(
+                                            () => _passwordError = false,
+                                          );
+                                        }
+                                      },
                                     ),
                                     const SizedBox(height: 14),
                                     AuthPillTextField(
@@ -117,6 +135,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       hintText: 'Şifre (tekrar)',
                                       obscureText: true,
                                       textInputAction: TextInputAction.next,
+                                      isError: _passwordAgainError,
+                                      onChanged: (_) {
+                                        if (_passwordAgainError) {
+                                          setState(
+                                            () => _passwordAgainError = false,
+                                          );
+                                        }
+                                      },
                                     ),
                                     const SizedBox(height: 14),
                                     AuthPillTextField(
@@ -124,6 +150,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       hintText: 'E-posta (isteğe bağlı)',
                                       keyboardType: TextInputType.emailAddress,
                                       textInputAction: TextInputAction.done,
+                                      isError: _emailError,
+                                      onChanged: (_) {
+                                        if (_emailError) {
+                                          setState(() => _emailError = false);
+                                        }
+                                      },
                                     ),
                                     const SizedBox(height: 10),
                                     Text(
@@ -195,14 +227,71 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   void _submit() {
     setState(() => _localError = null);
 
-    final password = _passwordController.text;
-    final again = _passwordAgainController.text;
-    if (password != again) {
+    final displayDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (displayDigits.length != 11) {
       setState(() {
-        _localError = 'Şifreler eşleşmiyor';
+        _localError = 'Telefon numarası 11 hane olmalı';
+        _phoneError = true;
+        _passwordError = false;
+        _passwordAgainError = false;
+        _emailError = false;
       });
       return;
     }
+
+    final password = _passwordController.text;
+    if (password.length < 4) {
+      setState(() {
+        _localError = 'Şifre en az 4 karakter olmalı';
+        _phoneError = false;
+        _passwordError = true;
+        _passwordAgainError = false;
+        _emailError = false;
+      });
+      return;
+    }
+
+    final again = _passwordAgainController.text;
+    if (again.length < 4) {
+      setState(() {
+        _localError = 'Şifre tekrarı en az 4 karakter olmalı';
+        _phoneError = false;
+        _passwordError = false;
+        _passwordAgainError = true;
+        _emailError = false;
+      });
+      return;
+    }
+
+    if (password != again) {
+      setState(() {
+        _localError = 'Şifreler eşleşmiyor';
+        _phoneError = false;
+        _passwordError = true;
+        _passwordAgainError = true;
+        _emailError = false;
+      });
+      return;
+    }
+
+    final email = _emailController.text.trim();
+    if (email.isNotEmpty && !email.contains('@')) {
+      setState(() {
+        _localError = 'E-posta adresinde @ işareti olmalı';
+        _phoneError = false;
+        _passwordError = false;
+        _passwordAgainError = false;
+        _emailError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _phoneError = false;
+      _passwordError = false;
+      _passwordAgainError = false;
+      _emailError = false;
+    });
 
     ref
         .read(authControllerProvider.notifier)
@@ -211,9 +300,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             _phoneController.text,
           ),
           password: password,
-          email: _emailController.text.trim().isEmpty
-              ? null
-              : _emailController.text.trim(),
+          email: email.isEmpty ? null : email,
         );
   }
 }

@@ -15,6 +15,9 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  String? _localError;
+  bool _phoneError = false;
+  bool _passwordError = false;
 
   @override
   void dispose() {
@@ -88,6 +91,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     AuthPillTextField(
                                       controller: _phoneController,
                                       hintText: 'Telefon Numarası',
+                                      isError: _phoneError,
+                                      onChanged: (_) {
+                                        if (_phoneError) {
+                                          setState(() => _phoneError = false);
+                                        }
+                                      },
                                       keyboardType:
                                           const TextInputType.numberWithOptions(
                                             decimal: false,
@@ -102,6 +111,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       controller: _passwordController,
                                       hintText: 'Şifre',
                                       obscureText: true,
+                                      isError: _passwordError,
+                                      onChanged: (_) {
+                                        if (_passwordError) {
+                                          setState(
+                                            () => _passwordError = false,
+                                          );
+                                        }
+                                      },
                                     ),
                                     const SizedBox(height: 14),
                                     AuthPrimaryButton(
@@ -109,22 +126,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       isLoading: authState.isLoading,
                                       onPressed: authState.isLoading
                                           ? null
-                                          : () {
-                                              ref
-                                                  .read(
-                                                    authControllerProvider
-                                                        .notifier,
-                                                  )
-                                                  .login(
-                                                    phoneNumber:
-                                                        TrNationalPhoneInputFormatter.toApiDigits(
-                                                          _phoneController.text,
-                                                        ),
-                                                    password:
-                                                        _passwordController
-                                                            .text,
-                                                  );
-                                            },
+                                          : _submit,
                                     ),
                                     const SizedBox(height: 40),
                                     AuthSecondaryButton(
@@ -132,6 +134,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       onPressed: () =>
                                           context.push('/register'),
                                     ),
+                                    if (_localError != null) ...[
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _localError!,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Color(0xFFFFDADA),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                     if (authState.errorMessage != null) ...[
                                       const SizedBox(height: 12),
                                       Text(
@@ -184,5 +197,43 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
       ),
     );
+  }
+
+  void _submit() {
+    setState(() => _localError = null);
+
+    final displayDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (displayDigits.length != 11) {
+      setState(() {
+        _localError = 'Telefon numarası 11 hane olmalı';
+        _phoneError = true;
+        _passwordError = false;
+      });
+      return;
+    }
+
+    final password = _passwordController.text;
+    if (password.length < 4) {
+      setState(() {
+        _localError = 'Şifre en az 4 karakter olmalı';
+        _passwordError = true;
+        _phoneError = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _phoneError = false;
+      _passwordError = false;
+    });
+
+    ref
+        .read(authControllerProvider.notifier)
+        .login(
+          phoneNumber: TrNationalPhoneInputFormatter.toApiDigits(
+            _phoneController.text,
+          ),
+          password: password,
+        );
   }
 }
