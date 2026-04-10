@@ -16,6 +16,11 @@ abstract class AuthRepository {
     required String phoneNumber,
     required String password,
   });
+  Future<ApiResult<AuthSession>> register({
+    required String phoneNumber,
+    required String password,
+    String? email,
+  });
   Future<void> logout();
   Future<AuthSession?> getCachedSession();
 }

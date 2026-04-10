@@ -101,6 +101,35 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  Future<void> register({
+    required String phoneNumber,
+    required String password,
+    String? email,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final repo = await ref.read(authRepositoryProvider.future);
+    final result = await repo.register(
+      phoneNumber: phoneNumber,
+      password: password,
+      email: email,
+    );
+    switch (result) {
+      case ApiSuccess<AuthSession>(:final data):
+        state = state.copyWith(
+          isLoading: false,
+          isAuthenticated: true,
+          user: data.user,
+          errorMessage: null,
+        );
+      case ApiFailure<AuthSession>(:final error):
+        state = state.copyWith(
+          isLoading: false,
+          isAuthenticated: false,
+          errorMessage: error.message,
+        );
+    }
+  }
+
   Future<void> logout() async {
     final repo = await ref.read(authRepositoryProvider.future);
     await repo.logout();

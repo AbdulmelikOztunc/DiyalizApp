@@ -2,6 +2,7 @@ import 'package:diyalizmobile/app/pages/about_page.dart';
 import 'package:diyalizmobile/app/pages/splash_page.dart';
 import 'package:diyalizmobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:diyalizmobile/features/auth/presentation/pages/login_page.dart';
+import 'package:diyalizmobile/features/auth/presentation/pages/register_page.dart';
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
 import 'package:diyalizmobile/features/modules/presentation/pages/home_page.dart';
 import 'package:diyalizmobile/features/modules/presentation/pages/module_page.dart';
@@ -30,11 +31,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (!isAuthenticated &&
           location != '/login' &&
+          location != '/register' &&
           location != '/splash') {
         return '/login';
       }
 
-      if (isAuthenticated && (location == '/login' || location == '/splash')) {
+      if (isAuthenticated &&
+          (location == '/login' ||
+              location == '/register' ||
+              location == '/splash')) {
         return '/home';
       }
 
@@ -59,6 +64,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (_, _) => const LoginPage(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (_, _) => const RegisterPage(),
       ),
       GoRoute(
         path: '/home',

@@ -20,4 +20,20 @@ class AuthRemoteDataSource {
       },
     );
   }
+
+  Future<ApiResult<Map<String, dynamic>>> register({
+    required String phoneNumber,
+    required String password,
+    String? email,
+  }) {
+    return _apiClient.post(
+      ApiEndpoints.register,
+      data: {
+        'phone': phoneNumber,
+        'username': phoneNumber,
+        'password': password,
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
+    );
+  }
 }
