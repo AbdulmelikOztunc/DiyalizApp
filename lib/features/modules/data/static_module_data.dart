@@ -48,6 +48,7 @@ const kStaticModules = <ModuleItem>[
 const kModule1Content = ModuleContent(
   moduleId: '1',
   title: 'Böbrek ve Hemodiyaliz',
+  videoUrl: 'https://www.youtube.com/watch?v=mI7u1wazvDU',
   contentPages: [
     ContentPage(
       title: 'Böbreklerin Görevleri',

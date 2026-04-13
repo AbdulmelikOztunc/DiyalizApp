@@ -2,6 +2,7 @@ import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart'
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 const _primaryPurple = Color(0xFF7C3AED);
 const _darkPurple = Color(0xFF5B21B6);
@@ -92,7 +93,9 @@ class _ModulePageState extends ConsumerState<ModulePage> {
   }
 
   Widget _buildContent(BuildContext context, ModuleContent content) {
-    final totalPages = content.contentPages.length;
+    final hasVideo = content.videoUrl != null && content.videoUrl!.isNotEmpty;
+    final totalPages =
+        content.contentPages.length + (hasVideo ? 1 : 0);
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Column(
@@ -110,6 +113,9 @@ class _ModulePageState extends ConsumerState<ModulePage> {
             itemCount: totalPages,
             onPageChanged: (page) => setState(() => _currentPage = page),
             itemBuilder: (context, index) {
+              if (hasVideo && index == totalPages - 1) {
+                return _VideoPageView(videoUrl: content.videoUrl!);
+              }
               return _ContentPageView(page: content.contentPages[index]);
             },
           ),
@@ -117,9 +123,8 @@ class _ModulePageState extends ConsumerState<ModulePage> {
         _BottomNavigation(
           currentPage: _currentPage,
           totalPages: totalPages,
-          onPrevious: _currentPage > 0
-              ? () => _goToPage(_currentPage - 1)
-              : null,
+          onPrevious:
+              _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
           onNext: _currentPage < totalPages - 1
               ? () => _goToPage(_currentPage + 1)
               : null,
@@ -351,6 +356,139 @@ class _SectionWidget extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _VideoPageView extends StatefulWidget {
+  const _VideoPageView({required this.videoUrl});
+
+  final String videoUrl;
+
+  @override
+  State<_VideoPageView> createState() => _VideoPageViewState();
+}
+
+class _VideoPageViewState extends State<_VideoPageView> {
+  late final YoutubePlayerController _ytController;
+
+  @override
+  void initState() {
+    super.initState();
+    final videoId = YoutubePlayerController.convertUrlToId(widget.videoUrl) ?? '';
+    _ytController = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showFullscreenButton: true,
+        showControls: true,
+        mute: false,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ytController.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Eğitim Videosu',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: 40,
+            height: 3,
+            decoration: BoxDecoration(
+              color: _primaryPurple,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Modülü tamamlamadan önce aşağıdaki eğitim videosunu izleyin.',
+            style: TextStyle(
+              fontSize: 15,
+              color: Color(0xFF374151),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryPurple.withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: YoutubePlayer(
+                controller: _ytController,
+                aspectRatio: 16 / 9,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _lightPurple,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _mediumPurple.withValues(alpha: 0.6),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _mediumPurple,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    color: _primaryPurple,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Videoyu izledikten sonra "Tamamla" butonuna basarak modülü bitirebilirsiniz.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF374151),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
