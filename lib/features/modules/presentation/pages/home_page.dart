@@ -14,18 +14,8 @@ class HomePage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Hos geldin ${authState.user?.fullName ?? ''}'),
-        actions: [
-          IconButton(
-            onPressed: () async {
-              await ref.read(authControllerProvider.notifier).logout();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
+        title: Text('Hoş geldin, ${authState.user?.fullName ?? ''}'),
+        centerTitle: true,
       ),
       body: modulesAsync.when(
         data: (modules) => ListView.separated(
@@ -39,30 +29,18 @@ class HomePage extends ConsumerWidget {
               ),
               title: Text(module.title),
               subtitle: Text(
-                module.isUnlocked ? 'Acik' : 'Kilitli',
+                module.isUnlocked ? 'Açık' : 'Kilitli',
               ),
               onTap: module.isUnlocked
-                  ? () => context.push('/module/${module.id}')
+                  ? () => context.go('/home/module/${module.id}')
                   : null,
             );
           },
         ),
         error: (_, _) => const Center(
-          child: Text('Moduller yuklenemedi'),
+          child: Text('Modüller yüklenemedi'),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => context.push('/ask'),
-              child: const Text('Arastirmaciya Sor'),
-            ),
-          ),
-        ),
       ),
     );
   }

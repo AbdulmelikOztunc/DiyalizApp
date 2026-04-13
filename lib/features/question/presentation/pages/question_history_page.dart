@@ -10,7 +10,10 @@ class QuestionHistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Gecmis Soru-Cevaplar')),
+      appBar: AppBar(
+        title: const Text('Gecmis Soru-Cevaplar'),
+        centerTitle: true,
+      ),
       body: kDummyQuestionHistory.isEmpty
           ? const _EmptyHistoryView()
           : ListView.separated(

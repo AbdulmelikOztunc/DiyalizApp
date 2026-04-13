@@ -18,6 +18,7 @@ class AuthRepositoryImpl implements AuthRepository {
        _sharedPreferences = sharedPreferences;
 
   static const _cachedUserKey = 'cached_user';
+  static const _cachedPhoneKey = 'cached_phone';
   static const _notificationEmailKey = 'notification_email';
   static const _useMockLogin = true;
   final AuthRemoteDataSource _remoteDataSource;
@@ -59,6 +60,8 @@ class AuthRepositoryImpl implements AuthRepository {
         _cachedUserKey,
         jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
       );
+      await _sharedPreferences.setString(_cachedPhoneKey, '5551234567');
+      await _sharedPreferences.setString(_notificationEmailKey, 'demo@diyaliz.com');
 
       return ApiSuccess(session);
     }
@@ -93,6 +96,7 @@ class AuthRepositoryImpl implements AuthRepository {
       _cachedUserKey,
       jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
     );
+    await _sharedPreferences.setString(_cachedPhoneKey, phoneNumber);
 
     return ApiSuccess(session);
   }
@@ -135,6 +139,7 @@ class AuthRepositoryImpl implements AuthRepository {
         _cachedUserKey,
         jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
       );
+      await _sharedPreferences.setString(_cachedPhoneKey, phone);
 
       if (trimmedEmail != null && trimmedEmail.isNotEmpty) {
         await _sharedPreferences.setString(_notificationEmailKey, trimmedEmail);
@@ -178,6 +183,7 @@ class AuthRepositoryImpl implements AuthRepository {
       _cachedUserKey,
       jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
     );
+    await _sharedPreferences.setString(_cachedPhoneKey, phone);
 
     if (trimmedEmail != null && trimmedEmail.isNotEmpty) {
       await _sharedPreferences.setString(_notificationEmailKey, trimmedEmail);
@@ -196,6 +202,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     await _secureStorageService.clearToken();
     await _sharedPreferences.remove(_cachedUserKey);
+    await _sharedPreferences.remove(_cachedPhoneKey);
     await _sharedPreferences.remove(_notificationEmailKey);
   }
 }

@@ -30,7 +30,10 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     final recentHistory = kDummyQuestionHistory.take(3).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Arastirmaciya Sor')),
+      appBar: AppBar(
+        title: const Text('Arastirmaciya Sor'),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

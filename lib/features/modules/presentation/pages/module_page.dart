@@ -14,7 +14,10 @@ class ModulePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final contentAsync = ref.watch(moduleContentProvider(moduleId));
     return Scaffold(
-      appBar: AppBar(title: Text('Modul $moduleId')),
+      appBar: AppBar(
+        title: Text('Modul $moduleId'),
+        centerTitle: true,
+      ),
       body: contentAsync.when(
         data: (content) {
           if (content == null) {
