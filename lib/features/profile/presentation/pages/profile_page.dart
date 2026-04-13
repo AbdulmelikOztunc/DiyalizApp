@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-const _lightPurple = Color(0xFFF3F0FF);
 const _mediumPurple = Color(0xFFE0D7FF);
 const _accentPurple = Color(0xFF7C3AED);
 const _darkPurple = Color(0xFF5B21B6);
@@ -91,16 +90,22 @@ class _UserHeader extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [_accentPurple, _darkPurple],
+          colors: [Color(0xFF8B5CF6),  _darkPurple,_accentPurple,],
+          stops: [0, 0.45, 1],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _accentPurple.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+            color: _accentPurple.withValues(alpha: 0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: _darkPurple.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -110,9 +115,26 @@ class _UserHeader extends StatelessWidget {
             width: 70,
             height: 70,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0.34),
+                  Colors.white.withValues(alpha: 0.18),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.85),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: const Center(
               child: Icon(
@@ -190,6 +212,8 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
+      elevation: 1.5,
+      shadowColor: _accentPurple.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: _mediumPurple.withValues(alpha: 0.6)),
@@ -205,8 +229,15 @@ class _MenuCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: _mediumPurple,
+                  color: _mediumPurple.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accentPurple.withValues(alpha: 0.12),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Icon(icon, color: _accentPurple, size: 24),
               ),
@@ -248,6 +279,8 @@ class _LogoutButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Material(
       color: Colors.white,
+      elevation: 1.5,
+      shadowColor: Colors.red.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: _mediumPurple.withValues(alpha: 0.6)),
@@ -265,6 +298,13 @@ class _LogoutButton extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: Colors.red.shade50,
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Icon(Icons.logout, color: Colors.red.shade600, size: 24),
               ),

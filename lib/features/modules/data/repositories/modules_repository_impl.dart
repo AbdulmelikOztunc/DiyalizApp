@@ -16,11 +16,30 @@ class ModulesRepositoryImpl implements ModulesRepository {
     }
 
     final data = (response as ApiSuccess<Map<String, dynamic>>).data;
-    final pagesRaw = data['pages'] as List<dynamic>? ?? <dynamic>[];
+    final pagesRaw = data['contentPages'] as List<dynamic>? ?? <dynamic>[];
+
+    final contentPages = pagesRaw.map((pageRaw) {
+      final page = pageRaw as Map<String, dynamic>;
+      final sectionsRaw = page['sections'] as List<dynamic>? ?? <dynamic>[];
+      return ContentPage(
+        title: page['title'] as String? ?? '',
+        sections: sectionsRaw.map((s) {
+          final section = s as Map<String, dynamic>;
+          final keyPointsRaw = section['keyPoints'] as List<dynamic>?;
+          return ContentSection(
+            heading: section['heading'] as String?,
+            body: section['body'] as String? ?? '',
+            keyPoints: keyPointsRaw?.map((e) => e.toString()).toList(),
+          );
+        }).toList(),
+      );
+    }).toList();
+
     return ApiSuccess(
       ModuleContent(
         moduleId: moduleId,
-        pages: pagesRaw.map((e) => e.toString()).toList(),
+        title: data['title'] as String? ?? '',
+        contentPages: contentPages,
         videoUrl: data['videoUrl'] as String?,
       ),
     );
@@ -40,6 +59,8 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return ModuleItem(
         id: item['id'] as String? ?? '',
         title: item['title'] as String? ?? 'Modul',
+        description: item['description'] as String? ?? '',
+        weekNumber: item['weekNumber'] as int? ?? 0,
         isUnlocked: item['isUnlocked'] as bool? ?? false,
       );
     }).toList();
