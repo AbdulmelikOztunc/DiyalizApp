@@ -37,20 +37,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF4E5AE2), Color.fromARGB(255, 25, 0, 90)],
-          ),
-        ),
+        decoration: const BoxDecoration(gradient: authGradient),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final h = constraints.maxHeight;
               const horizontal = 24.0;
               final topPad = (h * 0.04).clamp(20.0, 56.0);
-              final titleToCardGap = (h * 0.065).clamp(48.0, 100.0);
+              final titleToCardGap = (h * 0.05).clamp(32.0, 72.0);
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,15 +66,44 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.local_hospital_rounded,
+                                  size: 40,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
                               const Text(
-                                'Hemodiyaliz Eğitim Platformu',
+                                'Hemodiyaliz\nEğitim Platformu',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 28,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.5,
-                                  height: 1.5,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Sağlığınız için bilgi, her gün bir adım',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
                                 ),
                               ),
                               SizedBox(height: titleToCardGap),
@@ -94,14 +117,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       isError: _phoneError,
                                       onChanged: (_) {
                                         if (_phoneError) {
-                                          setState(() => _phoneError = false);
+                                          setState(
+                                              () => _phoneError = false);
                                         }
                                       },
                                       keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: false,
-                                            signed: false,
-                                          ),
+                                          const TextInputType
+                                              .numberWithOptions(
+                                        decimal: false,
+                                        signed: false,
+                                      ),
                                       inputFormatters: [
                                         TrNationalPhoneInputFormatter(),
                                       ],
@@ -115,8 +140,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       onChanged: (_) {
                                         if (_passwordError) {
                                           setState(
-                                            () => _passwordError = false,
-                                          );
+                                              () => _passwordError = false);
                                         }
                                       },
                                     ),
@@ -130,7 +154,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     ),
                                     const SizedBox(height: 40),
                                     AuthSecondaryButton(
-                                      label: 'Hesabım yok Kayıt Oluştur',
+                                      label: 'Hesabım yok — Kayıt Oluştur',
                                       onPressed: () =>
                                           context.push('/register'),
                                     ),
@@ -175,15 +199,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 360),
-                        child: TextButton(
+                        child: TextButton.icon(
                           onPressed: () => context.push('/about'),
-                          child: const Text(
+                          icon: Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                          label: Text(
                             'Uygulama Hakkında Bilgi Al',
                             style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              decorationColor: Colors.white,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -227,9 +255,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _passwordError = false;
     });
 
-    ref
-        .read(authControllerProvider.notifier)
-        .login(
+    ref.read(authControllerProvider.notifier).login(
           phoneNumber: TrNationalPhoneInputFormatter.toApiDigits(
             _phoneController.text,
           ),

@@ -43,20 +43,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF4E5AE2), Color.fromARGB(255, 25, 0, 90)],
-          ),
-        ),
+        decoration: const BoxDecoration(gradient: authGradient),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final h = constraints.maxHeight;
               const horizontal = 24.0;
-              final topPad = (h * 0.04).clamp(20.0, 56.0);
-              final titleToCardGap = (h * 0.05).clamp(36.0, 80.0);
+              final topPad = (h * 0.03).clamp(16.0, 40.0);
+              final titleToCardGap = (h * 0.035).clamp(24.0, 56.0);
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -78,18 +72,46 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.person_add_rounded,
+                                  size: 34,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
                               const Text(
-                                'Hemodiyaliz Eğitim Platformu',
+                                'Hesap Oluştur',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 26,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.5,
-                                  height: 1.4,
+                                  height: 1.3,
                                 ),
                               ),
-
+                              const SizedBox(height: 6),
+                              Text(
+                                'Eğitim platformuna katılın',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
                               SizedBox(height: titleToCardGap),
                               GlassAuthCard(
                                 child: Column(
@@ -101,14 +123,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       isError: _phoneError,
                                       onChanged: (_) {
                                         if (_phoneError) {
-                                          setState(() => _phoneError = false);
+                                          setState(
+                                              () => _phoneError = false);
                                         }
                                       },
                                       keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: false,
-                                            signed: false,
-                                          ),
+                                          const TextInputType
+                                              .numberWithOptions(
+                                        decimal: false,
+                                        signed: false,
+                                      ),
                                       textInputAction: TextInputAction.next,
                                       inputFormatters: [
                                         TrNationalPhoneInputFormatter(),
@@ -124,8 +148,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       onChanged: (_) {
                                         if (_passwordError) {
                                           setState(
-                                            () => _passwordError = false,
-                                          );
+                                              () => _passwordError = false);
                                         }
                                       },
                                     ),
@@ -138,9 +161,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       isError: _passwordAgainError,
                                       onChanged: (_) {
                                         if (_passwordAgainError) {
-                                          setState(
-                                            () => _passwordAgainError = false,
-                                          );
+                                          setState(() =>
+                                              _passwordAgainError = false);
                                         }
                                       },
                                     ),
@@ -148,24 +170,25 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                     AuthPillTextField(
                                       controller: _emailController,
                                       hintText: 'E-posta (isteğe bağlı)',
-                                      keyboardType: TextInputType.emailAddress,
+                                      keyboardType:
+                                          TextInputType.emailAddress,
                                       textInputAction: TextInputAction.done,
                                       isError: _emailError,
                                       onChanged: (_) {
                                         if (_emailError) {
-                                          setState(() => _emailError = false);
+                                          setState(
+                                              () => _emailError = false);
                                         }
                                       },
                                     ),
                                     const SizedBox(height: 10),
                                     Text(
                                       'Uzmanınız sorunuza yanıt verdiğinde '
-                                      'haberdar olmak için e-posta ekleyebilirsiniz. ',
+                                      'haberdar olmak için e-posta ekleyebilirsiniz.',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.92,
-                                        ),
+                                        color: Colors.white
+                                            .withValues(alpha: 0.85),
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
                                         height: 1.35,
@@ -293,9 +316,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       _emailError = false;
     });
 
-    ref
-        .read(authControllerProvider.notifier)
-        .register(
+    ref.read(authControllerProvider.notifier).register(
           phoneNumber: TrNationalPhoneInputFormatter.toApiDigits(
             _phoneController.text,
           ),
