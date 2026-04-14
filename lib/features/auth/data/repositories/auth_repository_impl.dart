@@ -20,7 +20,7 @@ class AuthRepositoryImpl implements AuthRepository {
   static const _cachedUserKey = 'cached_user';
   static const _cachedPhoneKey = 'cached_phone';
   static const _notificationEmailKey = 'notification_email';
-  static const _useMockLogin = true;
+  static const _useMockLogin = false;
   final AuthRemoteDataSource _remoteDataSource;
   final SecureStorageService _secureStorageService;
   final SharedPreferences _sharedPreferences;
@@ -48,6 +48,21 @@ class AuthRepositoryImpl implements AuthRepository {
     required String phoneNumber,
     required String password,
   }) async {
+    final phone = phoneNumber.trim();
+    if (phone.isEmpty) {
+      return const ApiFailure(ApiError(message: 'Telefon numarası gerekli'));
+    }
+    if (password.length < 6) {
+      return const ApiFailure(
+        ApiError(message: 'Şifre en az 6 hane olmalı'),
+      );
+    }
+    if (!_isDigitsOnly(password)) {
+      return const ApiFailure(
+        ApiError(message: 'Şifre sadece rakamlardan oluşmalı'),
+      );
+    }
+
     if (_useMockLogin) {
       await Future<void>.delayed(const Duration(milliseconds: 600));
       final session = AuthSession(
@@ -66,10 +81,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return ApiSuccess(session);
     }
 
-    final response = await _remoteDataSource.login(
-      phoneNumber: phoneNumber,
-      password: password,
-    );
+    final response = await _remoteDataSource.login(phoneNumber: phone, password: password);
 
     if (response case ApiFailure(:final error)) {
       return ApiFailure(error);
@@ -86,8 +98,10 @@ class AuthRepositoryImpl implements AuthRepository {
     final session = AuthSession(
       token: token,
       user: User(
-        id: userMap['id'] as String? ?? '',
-        fullName: userMap['fullName'] as String? ?? 'Kullanici',
+        id: '${userMap['id'] ?? ''}',
+        fullName: (userMap['full_name'] as String?) ??
+            (userMap['fullName'] as String?) ??
+            'Kullanici',
       ),
     );
 
@@ -96,24 +110,35 @@ class AuthRepositoryImpl implements AuthRepository {
       _cachedUserKey,
       jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
     );
-    await _sharedPreferences.setString(_cachedPhoneKey, phoneNumber);
+    await _sharedPreferences.setString(_cachedPhoneKey, phone);
 
     return ApiSuccess(session);
   }
 
   @override
   Future<ApiResult<AuthSession>> register({
+    required String fullName,
     required String phoneNumber,
     required String password,
     String? email,
   }) async {
+    final trimmedFullName = fullName.trim();
+    if (trimmedFullName.isEmpty) {
+      return const ApiFailure(ApiError(message: 'Ad soyad gerekli'));
+    }
+
     final phone = phoneNumber.trim();
     if (phone.isEmpty) {
       return const ApiFailure(ApiError(message: 'Telefon numarası gerekli'));
     }
     if (password.length < 6) {
       return const ApiFailure(
-        ApiError(message: 'Şifre en az 6 karakter olmalı'),
+        ApiError(message: 'Şifre en az 6 hane olmalı'),
+      );
+    }
+    if (!_isDigitsOnly(password)) {
+      return const ApiFailure(
+        ApiError(message: 'Şifre sadece rakamlardan oluşmalı'),
       );
     }
 
@@ -130,7 +155,7 @@ class AuthRepositoryImpl implements AuthRepository {
         token: 'mock-token-${DateTime.now().millisecondsSinceEpoch}',
         user: User(
           id: 'mock-user-${phone.hashCode}',
-          fullName: 'Yeni Kullanıcı',
+          fullName: trimmedFullName,
         ),
       );
 
@@ -151,6 +176,7 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     final response = await _remoteDataSource.register(
+      fullName: trimmedFullName,
       phoneNumber: phone,
       password: password,
       email: (trimmedEmail == null || trimmedEmail.isEmpty)
@@ -173,8 +199,10 @@ class AuthRepositoryImpl implements AuthRepository {
     final session = AuthSession(
       token: token,
       user: User(
-        id: userMap['id'] as String? ?? '',
-        fullName: userMap['fullName'] as String? ?? 'Kullanici',
+        id: '${userMap['id'] ?? ''}',
+        fullName: (userMap['full_name'] as String?) ??
+            (userMap['fullName'] as String?) ??
+            trimmedFullName,
       ),
     );
 
@@ -196,6 +224,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
   bool _looksLikeEmail(String value) {
     return RegExp(r'^[^@\s]+@([^@\s]+\.)+[^@\s]+$').hasMatch(value);
+  }
+
+  bool _isDigitsOnly(String value) {
+    return RegExp(r'^\d+$').hasMatch(value);
   }
 
   @override

@@ -17,6 +17,7 @@ abstract class AuthRepository {
     required String password,
   });
   Future<ApiResult<AuthSession>> register({
+    required String fullName,
     required String phoneNumber,
     required String password,
     String? email,

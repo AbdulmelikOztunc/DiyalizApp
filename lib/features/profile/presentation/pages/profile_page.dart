@@ -17,6 +17,7 @@ class ProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(profileSyncProvider);
     final phoneAsync = ref.watch(cachedPhoneProvider);
     final emailAsync = ref.watch(cachedEmailProvider);
     final authState = ref.watch(authControllerProvider);
@@ -45,16 +46,27 @@ class ProfilePage extends ConsumerWidget {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _MenuCard(
-                  icon: Icons.email_outlined,
-                  title: 'Email Güncelle',
+                  icon: Icons.person_outline_rounded,
+                  title: 'Profil Güncelle',
                   subtitle: emailAsync.when(
-                    data: (email) => email != null && email.isNotEmpty
-                        ? email
-                        : 'Email adresi kayıtlı değil',
+                    data: (email) {
+                      final currentEmail =
+                          email != null && email.isNotEmpty
+                              ? email
+                              : 'Email adresi kayıtlı değil';
+                      final currentFullName = authState.user?.fullName ?? '';
+                      if (currentFullName.isEmpty) return currentEmail;
+                      return '$currentFullName • $currentEmail';
+                    },
                     loading: () => 'Yükleniyor...',
-                    error: (_, _) => 'Email adresi kayıtlı değil',
+                    error: (_, _) => authState.user?.fullName ?? 'Profil bilgisi yok',
                   ),
-                  onTap: () => _showUpdateEmailDialog(context, ref),
+                  onTap: () => _showUpdateProfileDialog(
+                    context,
+                    ref,
+                    initialFullName: authState.user?.fullName ?? '',
+                    initialEmail: emailAsync.valueOrNull,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _MenuCard(
@@ -407,8 +419,14 @@ class _LogoutButton extends ConsumerWidget {
   }
 }
 
-void _showUpdateEmailDialog(BuildContext context, WidgetRef ref) {
-  final controller = TextEditingController();
+void _showUpdateProfileDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required String initialFullName,
+  String? initialEmail,
+}) {
+  final fullNameController = TextEditingController(text: initialFullName);
+  final emailController = TextEditingController(text: initialEmail ?? '');
 
   showDialog<void>(
     context: context,
@@ -433,22 +451,39 @@ void _showUpdateEmailDialog(BuildContext context, WidgetRef ref) {
                       color: _mediumPurple,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.email_outlined,
+                    child: const Icon(Icons.person_outline_rounded,
                         color: _primaryPurple, size: 22),
                   ),
                   const SizedBox(width: 12),
                   const Text(
-                    'Email Güncelle',
+                    'Profil Güncelle',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
               TextField(
-                controller: controller,
+                controller: fullNameController,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'Ad soyad',
+                  hintText: 'Ahmet Yılmaz',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: _primaryPurple, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  labelText: 'Yeni email adresi',
+                  labelText: 'Email adresi',
                   hintText: 'ornek@email.com',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -477,15 +512,21 @@ void _showUpdateEmailDialog(BuildContext context, WidgetRef ref) {
                       ),
                     ),
                     onPressed: () async {
-                      await ref
+                      final updated = await ref
                           .read(profileControllerProvider.notifier)
-                          .updateEmail(controller.text.trim());
-                      if (ctx.mounted) {
+                          .updateProfile(
+                            fullName: fullNameController.text,
+                            email: emailController.text,
+                          );
+                      if (!ctx.mounted) return;
+
+                      if (updated) {
                         Navigator.of(ctx).pop();
                         ref.invalidate(cachedEmailProvider);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: const Text('Email adresi güncellendi'),
+                            content:
+                                const Text('Profil bilgileri güncellendi'),
                             backgroundColor: const Color(0xFF2E7D32),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
@@ -493,7 +534,22 @@ void _showUpdateEmailDialog(BuildContext context, WidgetRef ref) {
                             ),
                           ),
                         );
+                        return;
                       }
+
+                      final errorText = ref
+                          .read(profileControllerProvider)
+                          .errorMessage;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(errorText ?? 'Profil güncellenemedi'),
+                          backgroundColor: Colors.red.shade600,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
                     },
                     child: const Text('Güncelle'),
                   ),
@@ -721,19 +777,24 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                         ),
                       ),
                       onPressed: () async {
-                        await ref
+                        final updated = await ref
                             .read(profileControllerProvider.notifier)
                             .updatePassword(
                               currentPassword:
                                   currentController.text.trim(),
                               newPassword: newController.text.trim(),
                             );
-                        if (ctx.mounted) {
+                        if (!ctx.mounted) return;
+
+                        if (updated) {
                           Navigator.of(ctx).pop();
+                          final message = ref
+                                  .read(profileControllerProvider)
+                                  .successMessage ??
+                              'Şifre başarıyla değiştirildi';
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: const Text(
-                                  'Şifre başarıyla değiştirildi'),
+                              content: Text(message),
                               backgroundColor: const Color(0xFF2E7D32),
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
@@ -741,7 +802,22 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                               ),
                             ),
                           );
+                          return;
                         }
+
+                        final errorText = ref
+                            .read(profileControllerProvider)
+                            .errorMessage;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(errorText ?? 'Şifre güncellenemedi'),
+                            backgroundColor: Colors.red.shade600,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
                       },
                       child: const Text('Değiştir'),
                     ),

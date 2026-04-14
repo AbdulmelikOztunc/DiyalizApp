@@ -17,7 +17,8 @@ final dioProvider = Provider<Dio>((ref) {
   final storage = ref.watch(secureStorageServiceProvider);
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'https://api.example.com',
+      baseUrl:
+          'https://lawngreen-turkey-839921.hostingersite.com/Diyaliz_App/api/v1',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       sendTimeout: const Duration(seconds: 15),

@@ -2,6 +2,7 @@ import 'package:diyalizmobile/features/auth/presentation/controllers/auth_contro
 import 'package:diyalizmobile/features/auth/presentation/utils/tr_national_phone_input_formatter.dart';
 import 'package:diyalizmobile/features/auth/presentation/widgets/glass_auth_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -136,6 +137,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       controller: _passwordController,
                                       hintText: 'Şifre',
                                       obscureText: true,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                        decimal: false,
+                                        signed: false,
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
                                       isError: _passwordError,
                                       onChanged: (_) {
                                         if (_passwordError) {
@@ -241,9 +250,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
 
     final password = _passwordController.text;
-    if (password.length < 4) {
+    if (password.length < 6) {
       setState(() {
-        _localError = 'Şifre en az 4 karakter olmalı';
+        _localError = 'Şifre en az 6 hane olmalı';
+        _passwordError = true;
+        _phoneError = false;
+      });
+      return;
+    }
+
+    if (!RegExp(r'^\d+$').hasMatch(password)) {
+      setState(() {
+        _localError = 'Şifre sadece rakamlardan oluşmalı';
         _passwordError = true;
         _phoneError = false;
       });

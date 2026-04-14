@@ -102,6 +102,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> register({
+    required String fullName,
     required String phoneNumber,
     required String password,
     String? email,
@@ -109,6 +110,7 @@ class AuthController extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     final repo = await ref.read(authRepositoryProvider.future);
     final result = await repo.register(
+      fullName: fullName,
       phoneNumber: phoneNumber,
       password: password,
       email: email,
@@ -134,5 +136,15 @@ class AuthController extends Notifier<AuthState> {
     final repo = await ref.read(authRepositoryProvider.future);
     await repo.logout();
     state = AuthState.initial();
+  }
+
+  void updateUserProfile({required String fullName}) {
+    final currentUser = state.user;
+    if (currentUser == null) return;
+
+    state = state.copyWith(
+      user: User(id: currentUser.id, fullName: fullName),
+      errorMessage: null,
+    );
   }
 }

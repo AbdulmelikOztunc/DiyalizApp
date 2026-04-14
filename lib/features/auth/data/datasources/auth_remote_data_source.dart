@@ -15,13 +15,13 @@ class AuthRemoteDataSource {
       ApiEndpoints.login,
       data: {
         'phone': phoneNumber,
-        'username': phoneNumber,
         'password': password,
       },
     );
   }
 
   Future<ApiResult<Map<String, dynamic>>> register({
+    required String fullName,
     required String phoneNumber,
     required String password,
     String? email,
@@ -29,8 +29,8 @@ class AuthRemoteDataSource {
     return _apiClient.post(
       ApiEndpoints.register,
       data: {
+        'full_name': fullName,
         'phone': phoneNumber,
-        'username': phoneNumber,
         'password': password,
         if (email != null && email.isNotEmpty) 'email': email,
       },

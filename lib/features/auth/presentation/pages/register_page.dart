@@ -2,6 +2,7 @@ import 'package:diyalizmobile/features/auth/presentation/controllers/auth_contro
 import 'package:diyalizmobile/features/auth/presentation/utils/tr_national_phone_input_formatter.dart';
 import 'package:diyalizmobile/features/auth/presentation/widgets/glass_auth_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,11 +14,13 @@ class RegisterPage extends ConsumerStatefulWidget {
 }
 
 class _RegisterPageState extends ConsumerState<RegisterPage> {
+  final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordAgainController = TextEditingController();
   final _emailController = TextEditingController();
   String? _localError;
+  bool _fullNameError = false;
   bool _phoneError = false;
   bool _passwordError = false;
   bool _passwordAgainError = false;
@@ -25,6 +28,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   @override
   void dispose() {
+    _fullNameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _passwordAgainController.dispose();
@@ -118,6 +122,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     AuthPillTextField(
+                                      controller: _fullNameController,
+                                      hintText: 'Ad Soyad',
+                                      textInputAction: TextInputAction.next,
+                                      isError: _fullNameError,
+                                      onChanged: (_) {
+                                        if (_fullNameError) {
+                                          setState(
+                                              () => _fullNameError = false);
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(height: 14),
+                                    AuthPillTextField(
                                       controller: _phoneController,
                                       hintText: 'Telefon Numarası',
                                       isError: _phoneError,
@@ -143,6 +160,15 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       controller: _passwordController,
                                       hintText: 'Şifre',
                                       obscureText: true,
+                                      keyboardType:
+                                          const TextInputType
+                                              .numberWithOptions(
+                                        decimal: false,
+                                        signed: false,
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
                                       textInputAction: TextInputAction.next,
                                       isError: _passwordError,
                                       onChanged: (_) {
@@ -157,6 +183,15 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                       controller: _passwordAgainController,
                                       hintText: 'Şifre (tekrar)',
                                       obscureText: true,
+                                      keyboardType:
+                                          const TextInputType
+                                              .numberWithOptions(
+                                        decimal: false,
+                                        signed: false,
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
                                       textInputAction: TextInputAction.next,
                                       isError: _passwordAgainError,
                                       onChanged: (_) {
@@ -180,19 +215,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                               () => _emailError = false);
                                         }
                                       },
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(
-                                      'Uzmanınız sorunuza yanıt verdiğinde '
-                                      'haberdar olmak için e-posta ekleyebilirsiniz.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.85),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.35,
-                                      ),
                                     ),
                                     const SizedBox(height: 18),
                                     AuthPrimaryButton(
@@ -250,10 +272,24 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   void _submit() {
     setState(() => _localError = null);
 
+    final fullName = _fullNameController.text.trim();
+    if (fullName.isEmpty) {
+      setState(() {
+        _localError = 'Ad soyad gerekli';
+        _fullNameError = true;
+        _phoneError = false;
+        _passwordError = false;
+        _passwordAgainError = false;
+        _emailError = false;
+      });
+      return;
+    }
+
     final displayDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (displayDigits.length != 11) {
       setState(() {
         _localError = 'Telefon numarası 11 hane olmalı';
+        _fullNameError = false;
         _phoneError = true;
         _passwordError = false;
         _passwordAgainError = false;
@@ -263,9 +299,22 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     final password = _passwordController.text;
-    if (password.length < 4) {
+    if (password.length < 6) {
       setState(() {
-        _localError = 'Şifre en az 4 karakter olmalı';
+        _localError = 'Şifre en az 6 hane olmalı';
+        _fullNameError = false;
+        _phoneError = false;
+        _passwordError = true;
+        _passwordAgainError = false;
+        _emailError = false;
+      });
+      return;
+    }
+
+    if (!RegExp(r'^\d+$').hasMatch(password)) {
+      setState(() {
+        _localError = 'Şifre sadece rakamlardan oluşmalı';
+        _fullNameError = false;
         _phoneError = false;
         _passwordError = true;
         _passwordAgainError = false;
@@ -275,9 +324,22 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     final again = _passwordAgainController.text;
-    if (again.length < 4) {
+    if (again.length < 6) {
       setState(() {
-        _localError = 'Şifre tekrarı en az 4 karakter olmalı';
+        _localError = 'Şifre tekrarı en az 6 hane olmalı';
+        _fullNameError = false;
+        _phoneError = false;
+        _passwordError = false;
+        _passwordAgainError = true;
+        _emailError = false;
+      });
+      return;
+    }
+
+    if (!RegExp(r'^\d+$').hasMatch(again)) {
+      setState(() {
+        _localError = 'Şifre tekrarı sadece rakamlardan oluşmalı';
+        _fullNameError = false;
         _phoneError = false;
         _passwordError = false;
         _passwordAgainError = true;
@@ -289,6 +351,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     if (password != again) {
       setState(() {
         _localError = 'Şifreler eşleşmiyor';
+        _fullNameError = false;
         _phoneError = false;
         _passwordError = true;
         _passwordAgainError = true;
@@ -301,6 +364,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     if (email.isNotEmpty && !email.contains('@')) {
       setState(() {
         _localError = 'E-posta adresinde @ işareti olmalı';
+        _fullNameError = false;
         _phoneError = false;
         _passwordError = false;
         _passwordAgainError = false;
@@ -310,6 +374,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     setState(() {
+      _fullNameError = false;
       _phoneError = false;
       _passwordError = false;
       _passwordAgainError = false;
@@ -317,6 +382,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     });
 
     ref.read(authControllerProvider.notifier).register(
+          fullName: fullName,
           phoneNumber: TrNationalPhoneInputFormatter.toApiDigits(
             _phoneController.text,
           ),

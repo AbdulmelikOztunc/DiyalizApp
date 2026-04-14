@@ -92,8 +92,12 @@ final class TrNationalPhoneInputFormatter extends TextInputFormatter {
     return formatted.length;
   }
 
-  /// API / doğrulama: ulusal 10 hane (`0` trunk kaldırılmış).
+  /// API / doğrulama: `0` ile başlayan 11 hane.
   static String toApiDigits(String formattedOrPlain, {int maxDigits = 10}) {
-    return _normalizeToNational(_digitsOnly(formattedOrPlain), maxDigits);
+    final national = _normalizeToNational(_digitsOnly(formattedOrPlain), maxDigits);
+    if (national.isEmpty) {
+      return '';
+    }
+    return '0$national';
   }
 }
