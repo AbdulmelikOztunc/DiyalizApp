@@ -3,26 +3,35 @@ import 'package:diyalizmobile/core/network/dio_providers.dart';
 import 'package:diyalizmobile/features/question/data/datasources/question_remote_data_source.dart';
 import 'package:diyalizmobile/features/question/data/repositories/question_repository_impl.dart';
 import 'package:diyalizmobile/features/question/domain/repositories/question_repository.dart';
+import 'package:diyalizmobile/features/question/presentation/models/question_history_item.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class QuestionState {
   const QuestionState({
     this.isSending = false,
+    this.isLoadingQuestions = false,
+    this.questions = const [],
     this.successMessage,
     this.errorMessage,
   });
 
   final bool isSending;
+  final bool isLoadingQuestions;
+  final List<QuestionHistoryItem> questions;
   final String? successMessage;
   final String? errorMessage;
 
   QuestionState copyWith({
     bool? isSending,
+    bool? isLoadingQuestions,
+    List<QuestionHistoryItem>? questions,
     String? successMessage,
     String? errorMessage,
   }) {
     return QuestionState(
       isSending: isSending ?? this.isSending,
+      isLoadingQuestions: isLoadingQuestions ?? this.isLoadingQuestions,
+      questions: questions ?? this.questions,
       successMessage: successMessage,
       errorMessage: errorMessage,
     );
@@ -42,28 +51,61 @@ final questionControllerProvider =
 
 class QuestionController extends Notifier<QuestionState> {
   @override
-  QuestionState build() => const QuestionState();
+  QuestionState build() {
+    Future<void>.microtask(loadQuestions);
+    return const QuestionState();
+  }
 
-  Future<void> sendQuestion(String message) async {
+  Future<void> sendQuestion({
+    required String message,
+    required String moduleId,
+  }) async {
     state = state.copyWith(
       isSending: true,
       successMessage: null,
       errorMessage: null,
     );
 
-    final result =
-        await ref.read(questionRepositoryProvider).sendQuestion(message: message);
+    final result = await ref.read(questionRepositoryProvider).sendQuestion(
+      message: message,
+      moduleId: moduleId,
+    );
     switch (result) {
-      case ApiSuccess<void>():
+      case ApiSuccess<String>(:final data):
         state = state.copyWith(
           isSending: false,
-          successMessage: 'Sorunuz alindi',
+          successMessage: data,
           errorMessage: null,
         );
-      case ApiFailure<void>(:final error):
+        await loadQuestions();
+      case ApiFailure<String>(:final error):
         state = state.copyWith(
           isSending: false,
           successMessage: null,
+          errorMessage: error.message,
+        );
+    }
+  }
+
+  Future<void> loadQuestions({String? moduleId}) async {
+    state = state.copyWith(
+      isLoadingQuestions: true,
+      errorMessage: null,
+    );
+
+    final result = await ref
+        .read(questionRepositoryProvider)
+        .getQuestions(moduleId: moduleId);
+    switch (result) {
+      case ApiSuccess<List<QuestionHistoryItem>>(:final data):
+        state = state.copyWith(
+          isLoadingQuestions: false,
+          questions: data,
+          errorMessage: null,
+        );
+      case ApiFailure<List<QuestionHistoryItem>>(:final error):
+        state = state.copyWith(
+          isLoadingQuestions: false,
           errorMessage: error.message,
         );
     }

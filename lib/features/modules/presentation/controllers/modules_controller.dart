@@ -1,4 +1,5 @@
 import 'package:diyalizmobile/core/network/dio_providers.dart';
+import 'package:diyalizmobile/core/network/api_result.dart';
 import 'package:diyalizmobile/features/modules/data/datasources/modules_remote_data_source.dart';
 import 'package:diyalizmobile/features/modules/data/repositories/modules_repository_impl.dart';
 import 'package:diyalizmobile/features/modules/data/static_module_data.dart';
@@ -14,8 +15,8 @@ final modulesRepositoryProvider = Provider<ModulesRepository>((ref) {
 
 final modulesControllerProvider =
     AsyncNotifierProvider<ModulesController, List<ModuleItem>>(
-  ModulesController.new,
-);
+      ModulesController.new,
+    );
 
 class ModulesController extends AsyncNotifier<List<ModuleItem>> {
   @override
@@ -24,13 +25,12 @@ class ModulesController extends AsyncNotifier<List<ModuleItem>> {
   }
 
   Future<List<ModuleItem>> _loadModules() async {
-    // TODO: API hazır olduğunda burayı aç
-    // final result = await ref.read(modulesRepositoryProvider).getMyModules();
-    // return switch (result) {
-    //   ApiSuccess<List<ModuleItem>>(:final data) => data,
-    //   ApiFailure<List<ModuleItem>>() => kStaticModules,
-    // };
-    return kStaticModules;
+    final result = await ref.read(modulesRepositoryProvider).getMyModules();
+    return switch (result) {
+      ApiSuccess<List<ModuleItem>>(:final data) when data.isNotEmpty => data,
+      ApiSuccess<List<ModuleItem>>() => kStaticModules,
+      ApiFailure<List<ModuleItem>>() => kStaticModules,
+    };
   }
 
   bool isModuleUnlocked(String moduleId) {
@@ -40,16 +40,36 @@ class ModulesController extends AsyncNotifier<List<ModuleItem>> {
   }
 }
 
-final moduleContentProvider =
-    FutureProvider.family<ModuleContent?, String>((ref, moduleId) async {
-  // TODO: API hazır olduğunda buradan çekilecek
-  // final result =
-  //     await ref.read(modulesRepositoryProvider).getModuleContent(moduleId);
-  // return switch (result) {
-  //   ApiSuccess<ModuleContent>(:final data) => data,
-  //   ApiFailure<ModuleContent>() => null,
-  // };
-
-  if (moduleId == '1') return kModule1Content;
-  return null;
+final moduleContentProvider = FutureProvider.family<ModuleContent?, String>((
+  ref,
+  moduleId,
+) async {
+  final result = await ref
+      .read(modulesRepositoryProvider)
+      .getModuleContent(moduleId);
+  return switch (result) {
+    ApiSuccess<ModuleContent>(:final data) when data.contentPages.isNotEmpty =>
+      data,
+    ApiSuccess<ModuleContent>() => moduleId == '1' ? kModule1Content : null,
+    ApiFailure<ModuleContent>() => moduleId == '1' ? kModule1Content : null,
+  };
 });
+
+final moduleProgressControllerProvider = Provider<ModuleProgressController>((
+  ref,
+) {
+  return ModuleProgressController(ref.read(modulesRepositoryProvider));
+});
+
+class ModuleProgressController {
+  ModuleProgressController(this._repository);
+
+  final ModulesRepository _repository;
+
+  Future<void> sendProgress({
+    required String moduleId,
+    required int pageIndex,
+  }) async {
+    await _repository.sendProgress(moduleId: moduleId, pageIndex: pageIndex);
+  }
+}

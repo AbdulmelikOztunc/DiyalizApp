@@ -16,20 +16,30 @@ class ModulesRepositoryImpl implements ModulesRepository {
     }
 
     final data = (response as ApiSuccess<Map<String, dynamic>>).data;
-    final pagesRaw = data['contentPages'] as List<dynamic>? ?? <dynamic>[];
+    final root = _extractPrimaryMap(data);
+    final moduleMap = _extractMap(root['module']) ?? root;
+    final pagesRaw = _extractPages(root, moduleMap);
 
     final contentPages = pagesRaw.map((pageRaw) {
       final page = pageRaw as Map<String, dynamic>;
-      final sectionsRaw = page['sections'] as List<dynamic>? ?? <dynamic>[];
+      final sectionsRaw = _extractSections(page);
       return ContentPage(
-        title: page['title'] as String? ?? '',
+        title: _toStringValue(page, const ['title', 'page_title', 'name']),
         sections: sectionsRaw.map((s) {
           final section = s as Map<String, dynamic>;
-          final keyPointsRaw = section['keyPoints'] as List<dynamic>?;
+          final keyPointsRaw = _extractStringList(section, const [
+            'keyPoints',
+            'key_points',
+            'points',
+          ]);
           return ContentSection(
-            heading: section['heading'] as String?,
-            body: section['body'] as String? ?? '',
-            keyPoints: keyPointsRaw?.map((e) => e.toString()).toList(),
+            heading: _toNullableStringValue(section, const [
+              'heading',
+              'subtitle',
+              'title',
+            ]),
+            body: _toStringValue(section, const ['body', 'text', 'content']),
+            keyPoints: keyPointsRaw.isEmpty ? null : keyPointsRaw,
           );
         }).toList(),
       );
@@ -38,9 +48,21 @@ class ModulesRepositoryImpl implements ModulesRepository {
     return ApiSuccess(
       ModuleContent(
         moduleId: moduleId,
-        title: data['title'] as String? ?? '',
+        title: _toStringValue(moduleMap, const [
+          'title',
+          'module_title',
+          'name',
+        ], fallback: _toStringValue(root, const ['title'], fallback: '')),
         contentPages: contentPages,
-        videoUrl: data['videoUrl'] as String?,
+        videoUrl: _toNullableStringValue(
+          moduleMap,
+          const ['videoUrl', 'video_url', 'video'],
+          fallback: _toNullableStringValue(root, const [
+            'videoUrl',
+            'video_url',
+            'video',
+          ]),
+        ),
       ),
     );
   }
@@ -56,12 +78,16 @@ class ModulesRepositoryImpl implements ModulesRepository {
     final modulesRaw = data['modules'] as List<dynamic>? ?? <dynamic>[];
     final modules = modulesRaw.map((raw) {
       final item = raw as Map<String, dynamic>;
+      final idValue = item['id'];
+      final weekValue = item['weekNumber'] ?? item['sort_order'];
+      final unlockedValue = item['isUnlocked'] ?? item['is_unlocked'];
       return ModuleItem(
-        id: item['id'] as String? ?? '',
+        id: idValue?.toString() ?? '',
         title: item['title'] as String? ?? 'Modul',
         description: item['description'] as String? ?? '',
-        weekNumber: item['weekNumber'] as int? ?? 0,
-        isUnlocked: item['isUnlocked'] as bool? ?? false,
+        weekNumber: _toInt(weekValue),
+        isUnlocked: _toBool(unlockedValue),
+        iconName: _toStringValue(item, const ['icon', 'icon_name', 'iconName']),
       );
     }).toList();
     return ApiSuccess(modules);
@@ -80,5 +106,106 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return ApiFailure(error);
     }
     return const ApiSuccess<void>(null);
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  bool _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == '1' || normalized == 'true';
+    }
+    return false;
+  }
+
+  Map<String, dynamic> _extractPrimaryMap(Map<String, dynamic> raw) {
+    final dataMap = _extractMap(raw['data']);
+    if (dataMap != null) return dataMap;
+    return raw;
+  }
+
+  List<dynamic> _extractPages(
+    Map<String, dynamic> root,
+    Map<String, dynamic> moduleMap,
+  ) {
+    final pagesFromRoot = _extractList(root, const [
+      'contentPages',
+      'content_pages',
+      'pages',
+      'contents',
+    ]);
+    if (pagesFromRoot.isNotEmpty) return pagesFromRoot;
+    return _extractList(moduleMap, const [
+      'contentPages',
+      'content_pages',
+      'pages',
+      'contents',
+    ]);
+  }
+
+  List<dynamic> _extractSections(Map<String, dynamic> page) {
+    final sections = _extractList(page, const [
+      'sections',
+      'content_sections',
+      'items',
+    ]);
+    if (sections.isNotEmpty) return sections;
+    final content = _toNullableStringValue(page, const [
+      'body',
+      'text',
+      'content',
+    ]);
+    if (content == null || content.isEmpty) return const <dynamic>[];
+    return <dynamic>[
+      <String, dynamic>{'body': content},
+    ];
+  }
+
+  Map<String, dynamic>? _extractMap(dynamic value) {
+    return value is Map<String, dynamic> ? value : null;
+  }
+
+  List<dynamic> _extractList(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is List<dynamic>) return value;
+    }
+    return <dynamic>[];
+  }
+
+  List<String> _extractStringList(Map<String, dynamic> map, List<String> keys) {
+    final values = _extractList(map, keys);
+    return values.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+  }
+
+  String _toStringValue(
+    Map<String, dynamic> map,
+    List<String> keys, {
+    String fallback = '',
+  }) {
+    final value = _toNullableStringValue(map, keys);
+    return value ?? fallback;
+  }
+
+  String? _toNullableStringValue(
+    Map<String, dynamic> map,
+    List<String> keys, {
+    String? fallback,
+  }) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') {
+        return text;
+      }
+    }
+    return fallback;
   }
 }

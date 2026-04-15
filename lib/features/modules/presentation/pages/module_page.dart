@@ -11,10 +11,7 @@ const _lightPurple = Color(0xFFF3F0FF);
 const _mediumPurple = Color(0xFFE0D7FF);
 
 class ModulePage extends ConsumerStatefulWidget {
-  const ModulePage({
-    required this.moduleId,
-    super.key,
-  });
+  const ModulePage({required this.moduleId, super.key});
 
   final String moduleId;
 
@@ -44,6 +41,16 @@ class _ModulePageState extends ConsumerState<ModulePage> {
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOut,
     );
+  }
+
+  Future<void> _sendProgress(int pageIndex) async {
+    try {
+      await ref
+          .read(moduleProgressControllerProvider)
+          .sendProgress(moduleId: widget.moduleId, pageIndex: pageIndex);
+    } catch (_) {
+      // Progress errors should not block UI interactions.
+    }
   }
 
   @override
@@ -94,8 +101,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
 
   Widget _buildContent(BuildContext context, ModuleContent content) {
     final hasVideo = content.videoUrl != null && content.videoUrl!.isNotEmpty;
-    final totalPages =
-        content.contentPages.length + (hasVideo ? 1 : 0);
+    final totalPages = content.contentPages.length + (hasVideo ? 1 : 0);
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Column(
@@ -111,7 +117,10 @@ class _ModulePageState extends ConsumerState<ModulePage> {
           child: PageView.builder(
             controller: _pageController,
             itemCount: totalPages,
-            onPageChanged: (page) => setState(() => _currentPage = page),
+            onPageChanged: (page) {
+              setState(() => _currentPage = page);
+              _sendProgress(page);
+            },
             itemBuilder: (context, index) {
               if (hasVideo && index == totalPages - 1) {
                 return _VideoPageView(videoUrl: content.videoUrl!);
@@ -123,11 +132,18 @@ class _ModulePageState extends ConsumerState<ModulePage> {
         _BottomNavigation(
           currentPage: _currentPage,
           totalPages: totalPages,
-          onPrevious:
-              _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+          onPrevious: _currentPage > 0
+              ? () => _goToPage(_currentPage - 1)
+              : null,
           onNext: _currentPage < totalPages - 1
               ? () => _goToPage(_currentPage + 1)
               : null,
+          onComplete: () async {
+            await _sendProgress(_currentPage);
+            if (context.mounted) {
+              Navigator.of(context).pop();
+            }
+          },
         ),
       ],
     );
@@ -173,8 +189,11 @@ class _ModuleAppBar extends StatelessWidget {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white, size: 20),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 onPressed: onBack,
               ),
               Expanded(
@@ -193,10 +212,7 @@ class _ModuleAppBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          _PageIndicator(
-            currentPage: currentPage,
-            totalPages: totalPages,
-          ),
+          _PageIndicator(currentPage: currentPage, totalPages: totalPages),
         ],
       ),
     );
@@ -204,10 +220,7 @@ class _ModuleAppBar extends StatelessWidget {
 }
 
 class _PageIndicator extends StatelessWidget {
-  const _PageIndicator({
-    required this.currentPage,
-    required this.totalPages,
-  });
+  const _PageIndicator({required this.currentPage, required this.totalPages});
 
   final int currentPage;
   final int totalPages;
@@ -317,9 +330,7 @@ class _SectionWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: _lightPurple,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _mediumPurple.withValues(alpha: 0.6),
-              ),
+              border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,7 +386,8 @@ class _VideoPageViewState extends State<_VideoPageView> {
   @override
   void initState() {
     super.initState();
-    final videoId = YoutubePlayerController.convertUrlToId(widget.videoUrl) ?? '';
+    final videoId =
+        YoutubePlayerController.convertUrlToId(widget.videoUrl) ?? '';
     _ytController = YoutubePlayerController.fromVideoId(
       videoId: videoId,
       autoPlay: false,
@@ -454,9 +466,7 @@ class _VideoPageViewState extends State<_VideoPageView> {
             decoration: BoxDecoration(
               color: _lightPurple,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _mediumPurple.withValues(alpha: 0.6),
-              ),
+              border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
             ),
             child: Row(
               children: [
@@ -499,12 +509,14 @@ class _BottomNavigation extends StatelessWidget {
     required this.totalPages,
     this.onPrevious,
     this.onNext,
+    this.onComplete,
   });
 
   final int currentPage;
   final int totalPages;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final Future<void> Function()? onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -571,7 +583,9 @@ class _BottomNavigation extends StatelessWidget {
           else if (currentPage == totalPages - 1)
             Expanded(
               child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: onComplete == null
+                    ? () => Navigator.of(context).pop()
+                    : () async => onComplete!.call(),
                 icon: const Icon(Icons.check_rounded, size: 20),
                 label: const Text('Tamamla'),
                 style: FilledButton.styleFrom(

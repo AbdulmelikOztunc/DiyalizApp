@@ -7,10 +7,24 @@ class QuestionRemoteDataSource {
 
   final ApiClient _apiClient;
 
-  Future<ApiResult<Map<String, dynamic>>> sendQuestion(String message) {
+  Future<ApiResult<Map<String, dynamic>>> sendQuestion({
+    required String message,
+    required String moduleId,
+  }) {
+    final parsedModuleId = int.tryParse(moduleId);
     return _apiClient.post(
       ApiEndpoints.questions,
-      data: {'message': message},
+      data: {
+        'question': message,
+        'module_id': parsedModuleId ?? moduleId,
+      },
+    );
+  }
+
+  Future<ApiResult<Map<String, dynamic>>> getQuestions({String? moduleId}) {
+    return _apiClient.get(
+      ApiEndpoints.questionsList,
+      queryParameters: moduleId == null ? null : {'module_id': moduleId},
     );
   }
 }

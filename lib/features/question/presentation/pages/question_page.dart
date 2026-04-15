@@ -1,7 +1,8 @@
 import 'package:diyalizmobile/features/question/presentation/controllers/question_controller.dart';
-import 'package:diyalizmobile/features/question/presentation/data/question_history_dummy.dart';
 import 'package:diyalizmobile/features/question/presentation/pages/question_history_page.dart';
 import 'package:diyalizmobile/features/question/presentation/widgets/question_history_card.dart';
+import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
+import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +21,8 @@ class QuestionPage extends ConsumerStatefulWidget {
 
 class _QuestionPageState extends ConsumerState<QuestionPage> {
   final _controller = TextEditingController();
+  String? _selectedModuleId;
+  bool _isTopicMenuOpen = false;
 
   @override
   void dispose() {
@@ -27,17 +30,24 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     super.dispose();
   }
 
-  void _handleSend() {
+  void _handleSend(String? selectedModuleId) {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    ref.read(questionControllerProvider.notifier).sendQuestion(text);
+    final moduleId = selectedModuleId ?? _selectedModuleId;
+    if (text.isEmpty || moduleId == null) return;
+    ref.read(questionControllerProvider.notifier).sendQuestion(
+          message: text,
+          moduleId: moduleId,
+        );
     _controller.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(questionControllerProvider);
-    final recentHistory = kDummyQuestionHistory.take(3).toList();
+    final modulesAsync = ref.watch(modulesControllerProvider);
+    final recentHistory = state.questions.take(3).toList();
+    final availableModules = _getAvailableModules(modulesAsync.valueOrNull);
+    final effectiveModuleId = _resolveSelectedModuleId(availableModules);
 
     ref.listen(questionControllerProvider, (prev, next) {
       if (next.successMessage != null) {
@@ -81,11 +91,22 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
-                _buildQuestionCard(state),
+                _buildQuestionCard(
+                  state: state,
+                  modules: availableModules,
+                  selectedModuleId: effectiveModuleId,
+                ),
                 const SizedBox(height: 24),
                 _buildHistoryHeader(),
                 const SizedBox(height: 12),
-                if (recentHistory.isEmpty)
+                if (state.isLoadingQuestions)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: CircularProgressIndicator(color: _primaryPurple),
+                    ),
+                  )
+                else if (recentHistory.isEmpty)
                   const _EmptyHistoryPreview()
                 else
                   for (int i = 0; i < recentHistory.length; i++) ...[
@@ -169,7 +190,11 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     );
   }
 
-  Widget _buildQuestionCard(QuestionState state) {
+  Widget _buildQuestionCard({
+    required QuestionState state,
+    required List<ModuleItem> modules,
+    required String? selectedModuleId,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -245,10 +270,19 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
             ),
           ),
           const SizedBox(height: 14),
+          if (modules.isNotEmpty) ...[
+            _buildTopicDropdown(
+              modules: modules,
+              selectedModuleId: selectedModuleId,
+            ),
+            const SizedBox(height: 14),
+          ],
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: state.isSending ? null : _handleSend,
+              onPressed: state.isSending || selectedModuleId == null
+                  ? null
+                  : () => _handleSend(selectedModuleId),
               icon: state.isSending
                   ? const SizedBox(
                       height: 16,
@@ -324,6 +358,168 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildTopicDropdown({
+    required List<ModuleItem> modules,
+    required String? selectedModuleId,
+  }) {
+    final selectedModule = modules.where((m) => m.id == selectedModuleId).firstOrNull;
+    final selectedTitle = selectedModule?.title ?? 'Konu secin';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => _isTopicMenuOpen = !_isTopicMenuOpen),
+          child: InputDecorator(
+            isFocused: _isTopicMenuOpen,
+            decoration: InputDecoration(
+              labelText: 'Konu',
+              labelStyle: TextStyle(
+                color: _primaryPurple.withValues(alpha: 0.7),
+                fontSize: 13,
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF6F3FF),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: _softPurple.withValues(alpha: 0.6),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: _softPurple.withValues(alpha: 0.6),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: _primaryPurple,
+                  width: 1.4,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF1A1A2E),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _isTopicMenuOpen
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: _primaryPurple,
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: !_isTopicMenuOpen
+              ? const SizedBox.shrink()
+              : Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 6),
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _softPurple.withValues(alpha: 0.6),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    shrinkWrap: true,
+                    itemCount: modules.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: _softPurple.withValues(alpha: 0.35),
+                    ),
+                    itemBuilder: (context, index) {
+                      final module = modules[index];
+                      final isSelected = module.id == selectedModuleId;
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedModuleId = module.id;
+                            _isTopicMenuOpen = false;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          color: isSelected
+                              ? _mediumPurple.withValues(alpha: 0.35)
+                              : Colors.transparent,
+                          child: Text(
+                            module.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFF1A1A2E),
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  List<ModuleItem> _getAvailableModules(List<ModuleItem>? modules) {
+    if (modules == null || modules.isEmpty) return const [];
+    final allModules = [...modules];
+    allModules.sort((a, b) {
+      if (a.weekNumber != b.weekNumber) {
+        return a.weekNumber.compareTo(b.weekNumber);
+      }
+      return a.id.compareTo(b.id);
+    });
+    return allModules;
+  }
+
+  String? _resolveSelectedModuleId(List<ModuleItem> modules) {
+    if (modules.isEmpty) return null;
+    if (_selectedModuleId != null &&
+        modules.any((module) => module.id == _selectedModuleId)) {
+      return _selectedModuleId;
+    }
+    return modules.first.id;
   }
 }
 

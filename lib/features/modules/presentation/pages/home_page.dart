@@ -23,8 +23,7 @@ class HomePage extends ConsumerWidget {
       backgroundColor: const Color(0xFFF8F6FF),
       body: modulesAsync.when(
         data: (modules) {
-          final unlockedCount =
-              modules.where((m) => m.isUnlocked).length;
+          final unlockedCount = modules.where((m) => m.isUnlocked).length;
           return CustomScrollView(
             slivers: [
               _HeaderSliver(
@@ -33,8 +32,10 @@ class HomePage extends ConsumerWidget {
                 totalCount: modules.length,
               ),
               SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 sliver: SliverList.separated(
                   itemCount: modules.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -42,7 +43,6 @@ class HomePage extends ConsumerWidget {
                     final module = modules[index];
                     return _ModuleCard(
                       module: module,
-                      index: index,
                       onTap: module.isUnlocked
                           ? () => context.go('/home/module/${module.id}')
                           : null,
@@ -54,9 +54,7 @@ class HomePage extends ConsumerWidget {
             ],
           );
         },
-        error: (_, _) => const Center(
-          child: Text('Modüller yüklenemedi'),
-        ),
+        error: (_, _) => const Center(child: Text('Modüller yüklenemedi')),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
     );
@@ -155,9 +153,7 @@ class _HeaderSliver extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,8 +186,9 @@ class _HeaderSliver extends StatelessWidget {
                       value: progress,
                       minHeight: 8,
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      valueColor:
-                          const AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -205,30 +202,15 @@ class _HeaderSliver extends StatelessWidget {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
-    required this.module,
-    required this.index,
-    this.onTap,
-  });
+  const _ModuleCard({required this.module, this.onTap});
 
   final ModuleItem module;
-  final int index;
   final VoidCallback? onTap;
-
-  static const _moduleIcons = [
-    Icons.biotech_rounded,
-    Icons.restaurant_rounded,
-    Icons.medication_rounded,
-    Icons.healing_rounded,
-    Icons.shield_rounded,
-    Icons.psychology_rounded,
-  ];
 
   @override
   Widget build(BuildContext context) {
     final isUnlocked = module.isUnlocked;
-    final icon =
-        index < _moduleIcons.length ? _moduleIcons[index] : Icons.book_rounded;
+    final icon = _resolveModuleIcon(module);
 
     return Material(
       color: Colors.white,
@@ -268,9 +250,7 @@ class _ModuleCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: isUnlocked
-                                ? _primaryPurple
-                                : _lockedGrey,
+                            color: isUnlocked ? _primaryPurple : _lockedGrey,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -278,7 +258,9 @@ class _ModuleCard extends StatelessWidget {
                         if (isUnlocked)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFE8F5E9),
                               borderRadius: BorderRadius.circular(20),
@@ -295,7 +277,9 @@ class _ModuleCard extends StatelessWidget {
                         else
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(20),
@@ -351,6 +335,72 @@ class _ModuleCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _resolveModuleIcon(ModuleItem module) {
+    final byApiName = _iconFromApiName(module.iconName);
+    if (byApiName != null) return byApiName;
+
+    final title = module.title.toLowerCase();
+    if (title.contains('böbrek') || title.contains('hemodiyaliz')) {
+      return Icons.biotech_rounded;
+    }
+    if (title.contains('beslenme') || title.contains('sıvı')) {
+      return Icons.restaurant_rounded;
+    }
+    if (title.contains('ilaç')) {
+      return Icons.medication_rounded;
+    }
+    if (title.contains('damar') || title.contains('fistül')) {
+      return Icons.healing_rounded;
+    }
+    if (title.contains('komplikasyon') || title.contains('korunma')) {
+      return Icons.shield_rounded;
+    }
+    if (title.contains('psikososyal') || title.contains('yaşam kalitesi')) {
+      return Icons.psychology_rounded;
+    }
+
+    return Icons.book_rounded;
+  }
+
+  IconData? _iconFromApiName(String rawIconName) {
+    final normalized = rawIconName.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    switch (normalized) {
+      case 'bi-heart-pulse':
+      case 'heart-pulse':
+      case 'heartbeat':
+      case 'heart':
+        return Icons.favorite_rounded;
+      case 'bi-droplet':
+      case 'droplet':
+      case 'water':
+        return Icons.water_drop_rounded;
+      case 'bi-capsule':
+      case 'capsule':
+      case 'pill':
+      case 'medication':
+        return Icons.medication_rounded;
+      case 'bi-bandaid':
+      case 'bandaid':
+      case 'healing':
+        return Icons.healing_rounded;
+      case 'bi-shield-check':
+      case 'shield':
+      case 'protection':
+        return Icons.shield_rounded;
+      case 'bi-person-hearts':
+      case 'psychology':
+      case 'support':
+        return Icons.psychology_rounded;
+      case 'bi-book':
+      case 'book':
+        return Icons.book_rounded;
+      default:
+        return null;
+    }
   }
 }
 

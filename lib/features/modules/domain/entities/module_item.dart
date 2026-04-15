@@ -5,6 +5,7 @@ class ModuleItem {
     required this.isUnlocked,
     this.description = '',
     this.weekNumber = 0,
+    this.iconName = '',
   });
 
   final String id;
@@ -12,6 +13,7 @@ class ModuleItem {
   final String description;
   final int weekNumber;
   final bool isUnlocked;
+  final String iconName;
 }
 
 class ModuleContent {
@@ -31,21 +33,14 @@ class ModuleContent {
 }
 
 class ContentPage {
-  const ContentPage({
-    required this.title,
-    required this.sections,
-  });
+  const ContentPage({required this.title, required this.sections});
 
   final String title;
   final List<ContentSection> sections;
 }
 
 class ContentSection {
-  const ContentSection({
-    required this.body,
-    this.heading,
-    this.keyPoints,
-  });
+  const ContentSection({required this.body, this.heading, this.keyPoints});
 
   final String? heading;
   final String body;
