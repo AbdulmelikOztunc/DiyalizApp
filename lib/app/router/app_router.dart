@@ -13,14 +13,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authControllerProvider);
+  final authIsLoading = ref.watch(
+    authControllerProvider.select((state) => state.isLoading),
+  );
+  final authIsAuthenticated = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
   final modulesAsync = ref.watch(modulesControllerProvider);
 
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
-      final isLoading = authState.isLoading;
-      final isAuthenticated = authState.isAuthenticated;
+      final isLoading = authIsLoading;
+      final isAuthenticated = authIsAuthenticated;
       final location = state.matchedLocation;
 
       if (isLoading && location != '/splash') {

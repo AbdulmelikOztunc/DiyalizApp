@@ -4,6 +4,7 @@ class ApiEndpoints {
   static const login = 'auth/login.php';
   static const register = 'auth/register.php';
   static const profile = 'auth/profile.php';
+  static const updatePhone = 'auth/update_phone.php';
   static const myModules = 'modules/list.php';
   static const moduleContent = 'modules/content.php';
   static const moduleProgress = 'modules/progress.php';

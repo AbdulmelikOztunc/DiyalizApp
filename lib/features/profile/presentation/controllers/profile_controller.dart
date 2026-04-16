@@ -71,7 +71,8 @@ class ProfileController extends Notifier<ProfileState> {
     final fullName = (user['full_name'] as String?)?.trim();
     final email = (user['email'] as String?)?.trim();
     final phone = (user['phone'] as String?)?.trim();
-    final userId = '${user['id'] ?? ref.read(authControllerProvider).user?.id ?? ''}';
+    final userId =
+        '${user['id'] ?? ref.read(authControllerProvider).user?.id ?? ''}';
 
     final prefs = await ref.read(sharedPreferencesProvider.future);
 
@@ -90,7 +91,9 @@ class ProfileController extends Notifier<ProfileState> {
         'cached_user',
         jsonEncode({'id': userId, 'fullName': fullName}),
       );
-      ref.read(authControllerProvider.notifier).updateUserProfile(fullName: fullName);
+      ref
+          .read(authControllerProvider.notifier)
+          .updateUserProfile(fullName: fullName);
     }
   }
 
@@ -102,21 +105,15 @@ class ProfileController extends Notifier<ProfileState> {
     final trimmedEmail = email.trim();
 
     if (trimmedFullName.isEmpty) {
-      state = state.copyWith(
-        errorMessage: 'Ad soyad boş olamaz',
-      );
+      state = state.copyWith(errorMessage: 'Ad soyad boş olamaz');
       return false;
     }
     if (trimmedEmail.isEmpty) {
-      state = state.copyWith(
-        errorMessage: 'Email adresi boş olamaz',
-      );
+      state = state.copyWith(errorMessage: 'Email adresi boş olamaz');
       return false;
     }
     if (!_looksLikeEmail(trimmedEmail)) {
-      state = state.copyWith(
-        errorMessage: 'Geçerli bir email adresi girin',
-      );
+      state = state.copyWith(errorMessage: 'Geçerli bir email adresi girin');
       return false;
     }
 
@@ -125,17 +122,11 @@ class ProfileController extends Notifier<ProfileState> {
     final api = ref.read(apiClientProvider);
     final response = await api.post(
       ApiEndpoints.profile,
-      data: {
-        'full_name': trimmedFullName,
-        'email': trimmedEmail,
-      },
+      data: {'full_name': trimmedFullName, 'email': trimmedEmail},
     );
 
     if (response case ApiFailure<Map<String, dynamic>>(:final error)) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.message,
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.message);
       return false;
     }
 
@@ -163,41 +154,66 @@ class ProfileController extends Notifier<ProfileState> {
     return true;
   }
 
-  Future<void> updatePhone(String newPhone) async {
-    if (newPhone.trim().isEmpty) {
+  Future<bool> updatePhone(String newPhone) async {
+    final trimmedPhone = newPhone.trim();
+    if (trimmedPhone.isEmpty) {
+      state = state.copyWith(errorMessage: 'Telefon numarası boş olamaz');
+      return false;
+    }
+    if (trimmedPhone.length != 11 || !trimmedPhone.startsWith('0')) {
       state = state.copyWith(
-        errorMessage: 'Telefon numarası boş olamaz',
+        errorMessage: 'Geçerli bir telefon numarası girin',
       );
-      return;
+      return false;
     }
 
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, errorMessage: null);
 
-    // TODO: API entegrasyonu yapıldığında bu blok gerçek çağrıyla
-    // değiştirilecek: PATCH /v1/me/phone
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final api = ref.read(apiClientProvider);
+    final response = await api.post(
+      ApiEndpoints.updatePhone,
+      data: {'new_phone': trimmedPhone},
+    );
+
+    if (response case ApiFailure<Map<String, dynamic>>(:final error)) {
+      state = state.copyWith(isLoading: false, errorMessage: error.message);
+      return false;
+    }
+
+    final body = (response as ApiSuccess<Map<String, dynamic>>).data;
+    final success = body['success'] == true;
+    final message = (body['message'] as String?)?.trim();
+    if (!success) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: (message != null && message.isNotEmpty)
+            ? message
+            : 'Telefon numarası güncellenemedi',
+      );
+      return false;
+    }
 
     final prefs = await ref.read(sharedPreferencesProvider.future);
-    await prefs.setString('cached_phone', newPhone);
+    await prefs.setString('cached_phone', trimmedPhone);
+    await syncProfileFromServer();
 
     state = state.copyWith(
       isLoading: false,
-      successMessage: 'Telefon numarası güncellendi',
+      successMessage: (message != null && message.isNotEmpty)
+          ? message
+          : 'Telefon numarası güncellendi',
     );
+    return true;
   }
 
   Future<void> updateEmail(String newEmail) async {
     final trimmedEmail = newEmail.trim();
     if (trimmedEmail.isEmpty) {
-      state = state.copyWith(
-        errorMessage: 'Email adresi boş olamaz',
-      );
+      state = state.copyWith(errorMessage: 'Email adresi boş olamaz');
       return;
     }
     if (!_looksLikeEmail(trimmedEmail)) {
-      state = state.copyWith(
-        errorMessage: 'Geçerli bir email adresi girin',
-      );
+      state = state.copyWith(errorMessage: 'Geçerli bir email adresi girin');
       return;
     }
 
@@ -221,9 +237,7 @@ class ProfileController extends Notifier<ProfileState> {
     required String newPassword,
   }) async {
     if (currentPassword.trim().isEmpty || newPassword.trim().isEmpty) {
-      state = state.copyWith(
-        errorMessage: 'Tüm alanları doldurun',
-      );
+      state = state.copyWith(errorMessage: 'Tüm alanları doldurun');
       return false;
     }
     if (newPassword.length < 6) {
@@ -245,10 +259,7 @@ class ProfileController extends Notifier<ProfileState> {
     );
 
     if (response case ApiFailure<Map<String, dynamic>>(:final error)) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.message,
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.message);
       return false;
     }
 

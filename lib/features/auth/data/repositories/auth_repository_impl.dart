@@ -111,6 +111,12 @@ class AuthRepositoryImpl implements AuthRepository {
       jsonEncode({'id': session.user.id, 'fullName': session.user.fullName}),
     );
     await _sharedPreferences.setString(_cachedPhoneKey, phone);
+    final loginEmail = (userMap['email'] as String?)?.trim();
+    if (loginEmail != null && loginEmail.isNotEmpty) {
+      await _sharedPreferences.setString(_notificationEmailKey, loginEmail);
+    } else {
+      await _sharedPreferences.remove(_notificationEmailKey);
+    }
 
     return ApiSuccess(session);
   }
@@ -213,8 +219,13 @@ class AuthRepositoryImpl implements AuthRepository {
     );
     await _sharedPreferences.setString(_cachedPhoneKey, phone);
 
-    if (trimmedEmail != null && trimmedEmail.isNotEmpty) {
-      await _sharedPreferences.setString(_notificationEmailKey, trimmedEmail);
+    final responseEmail = (userMap['email'] as String?)?.trim();
+    final emailToCache = (responseEmail != null && responseEmail.isNotEmpty)
+        ? responseEmail
+        : trimmedEmail;
+
+    if (emailToCache != null && emailToCache.isNotEmpty) {
+      await _sharedPreferences.setString(_notificationEmailKey, emailToCache);
     } else {
       await _sharedPreferences.remove(_notificationEmailKey);
     }

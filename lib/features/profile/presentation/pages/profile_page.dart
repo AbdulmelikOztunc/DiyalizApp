@@ -50,16 +50,16 @@ class ProfilePage extends ConsumerWidget {
                   title: 'Profil Güncelle',
                   subtitle: emailAsync.when(
                     data: (email) {
-                      final currentEmail =
-                          email != null && email.isNotEmpty
-                              ? email
-                              : 'Email adresi kayıtlı değil';
+                      final currentEmail = email != null && email.isNotEmpty
+                          ? email
+                          : 'Email adresi kayıtlı değil';
                       final currentFullName = authState.user?.fullName ?? '';
                       if (currentFullName.isEmpty) return currentEmail;
                       return '$currentFullName • $currentEmail';
                     },
                     loading: () => 'Yükleniyor...',
-                    error: (_, _) => authState.user?.fullName ?? 'Profil bilgisi yok',
+                    error: (_, _) =>
+                        authState.user?.fullName ?? 'Profil bilgisi yok',
                   ),
                   onTap: () => _showUpdateProfileDialog(
                     context,
@@ -93,9 +93,7 @@ class ProfilePage extends ConsumerWidget {
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-            sliver: SliverToBoxAdapter(
-              child: _SectionLabel(label: 'Diğer'),
-            ),
+            sliver: SliverToBoxAdapter(child: _SectionLabel(label: 'Diğer')),
           ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -393,7 +391,11 @@ class _LogoutButton extends ConsumerWidget {
                     ),
                   ],
                 ),
-                child: Icon(Icons.logout_rounded, color: Colors.red.shade500, size: 22),
+                child: Icon(
+                  Icons.logout_rounded,
+                  color: Colors.red.shade500,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -451,8 +453,11 @@ void _showUpdateProfileDialog(
                       color: _mediumPurple,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.person_outline_rounded,
-                        color: _primaryPurple, size: 22),
+                    child: const Icon(
+                      Icons.person_outline_rounded,
+                      color: _primaryPurple,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Text(
@@ -473,8 +478,10 @@ void _showUpdateProfileDialog(
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: _primaryPurple, width: 2),
+                    borderSide: const BorderSide(
+                      color: _primaryPurple,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -490,8 +497,10 @@ void _showUpdateProfileDialog(
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: _primaryPurple, width: 2),
+                    borderSide: const BorderSide(
+                      color: _primaryPurple,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -525,8 +534,7 @@ void _showUpdateProfileDialog(
                         ref.invalidate(cachedEmailProvider);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content:
-                                const Text('Profil bilgileri güncellendi'),
+                            content: const Text('Profil bilgileri güncellendi'),
                             backgroundColor: const Color(0xFF2E7D32),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
@@ -590,8 +598,11 @@ void _showUpdatePhoneDialog(BuildContext context, WidgetRef ref) {
                       color: _mediumPurple,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.phone_outlined,
-                        color: _primaryPurple, size: 22),
+                    child: const Icon(
+                      Icons.phone_outlined,
+                      color: _primaryPurple,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Text(
@@ -613,8 +624,10 @@ void _showUpdatePhoneDialog(BuildContext context, WidgetRef ref) {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: _primaryPurple, width: 2),
+                    borderSide: const BorderSide(
+                      color: _primaryPurple,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -635,19 +648,20 @@ void _showUpdatePhoneDialog(BuildContext context, WidgetRef ref) {
                       ),
                     ),
                     onPressed: () async {
-                      final digits =
-                          TrNationalPhoneInputFormatter.toApiDigits(
-                              controller.text);
-                      await ref
+                      final digits = TrNationalPhoneInputFormatter.toApiDigits(
+                        controller.text,
+                      );
+                      final updated = await ref
                           .read(profileControllerProvider.notifier)
                           .updatePhone(digits);
-                      if (ctx.mounted) {
+                      if (!ctx.mounted) return;
+
+                      if (updated) {
                         Navigator.of(ctx).pop();
                         ref.invalidate(cachedPhoneProvider);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content:
-                                const Text('Telefon numarası güncellendi'),
+                            content: const Text('Telefon numarası güncellendi'),
                             backgroundColor: const Color(0xFF2E7D32),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
@@ -655,7 +669,24 @@ void _showUpdatePhoneDialog(BuildContext context, WidgetRef ref) {
                             ),
                           ),
                         );
+                        return;
                       }
+
+                      final errorText = ref
+                          .read(profileControllerProvider)
+                          .errorMessage;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            errorText ?? 'Telefon numarası güncellenemedi',
+                          ),
+                          backgroundColor: Colors.red.shade600,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
                     },
                     child: const Text('Güncelle'),
                   ),
@@ -682,10 +713,13 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
       filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
       child: StatefulBuilder(
         builder: (ctx, setState) => Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Container(
             width: MediaQuery.of(ctx).size.width * 0.9,
             padding: const EdgeInsets.all(24),
@@ -701,14 +735,19 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                         color: _mediumPurple,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.lock_outline,
-                          color: _primaryPurple, size: 22),
+                      child: const Icon(
+                        Icons.lock_outline,
+                        color: _primaryPurple,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     const Text(
                       'Şifre Değiştir',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -723,8 +762,10 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: _primaryPurple, width: 2),
+                      borderSide: const BorderSide(
+                        color: _primaryPurple,
+                        width: 2,
+                      ),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -748,15 +789,16 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: _primaryPurple, width: 2),
+                      borderSide: const BorderSide(
+                        color: _primaryPurple,
+                        width: 2,
+                      ),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         obscureNew ? Icons.visibility : Icons.visibility_off,
                       ),
-                      onPressed: () =>
-                          setState(() => obscureNew = !obscureNew),
+                      onPressed: () => setState(() => obscureNew = !obscureNew),
                     ),
                   ),
                 ),
@@ -780,15 +822,15 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                         final updated = await ref
                             .read(profileControllerProvider.notifier)
                             .updatePassword(
-                              currentPassword:
-                                  currentController.text.trim(),
+                              currentPassword: currentController.text.trim(),
                               newPassword: newController.text.trim(),
                             );
                         if (!ctx.mounted) return;
 
                         if (updated) {
                           Navigator.of(ctx).pop();
-                          final message = ref
+                          final message =
+                              ref
                                   .read(profileControllerProvider)
                                   .successMessage ??
                               'Şifre başarıyla değiştirildi';
@@ -848,16 +890,20 @@ void _showLogoutDialog(BuildContext context, WidgetRef ref) {
                 color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.logout_rounded, color: Colors.red.shade500,
-                  size: 20),
+              child: Icon(
+                Icons.logout_rounded,
+                color: Colors.red.shade500,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
-            const Text('Çıkış Yap',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const Text(
+              'Çıkış Yap',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
-        content:
-            const Text('Hesabınızdan çıkmak istediğinize emin misiniz?'),
+        content: const Text('Hesabınızdan çıkmak istediğinize emin misiniz?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
