@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 const _primaryPurple = Color(0xFF7C3AED);
@@ -21,18 +24,98 @@ class ModulePage extends ConsumerStatefulWidget {
 
 class _ModulePageState extends ConsumerState<ModulePage> {
   late final PageController _pageController;
+  late final FlutterTts _tts;
   int _currentPage = 0;
+  bool _isSpeaking = false;
+  String? _speakingContentId;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _tts = FlutterTts()
+      ..setStartHandler(() {
+        if (!mounted) return;
+        setState(() => _isSpeaking = true);
+      })
+      ..setCompletionHandler(() {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _speakingContentId = null;
+        });
+      })
+      ..setCancelHandler(() {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _speakingContentId = null;
+        });
+      })
+      ..setErrorHandler((_) {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _speakingContentId = null;
+        });
+      });
+    unawaited(_configureTts());
   }
 
   @override
   void dispose() {
+    unawaited(_tts.stop());
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _configureTts() async {
+    await _tts.setLanguage('tr-TR');
+    await _tts.setSpeechRate(0.45);
+    await _tts.setPitch(1.0);
+    await _tts.setVolume(1.0);
+  }
+
+  String _buildNarrationText(ContentPage page) {
+    final buffer = StringBuffer(page.title);
+    for (final section in page.sections) {
+      final heading = section.heading;
+      if (heading != null && heading.isNotEmpty) {
+        buffer
+          ..write('. ')
+          ..write(heading);
+      }
+
+      if (section.body.isNotEmpty) {
+        buffer
+          ..write('. ')
+          ..write(section.body);
+      }
+
+      final points = section.keyPoints;
+      if (points != null && points.isNotEmpty) {
+        for (final point in points) {
+          buffer
+            ..write('. ')
+            ..write(point);
+        }
+      }
+    }
+    return buffer.toString();
+  }
+
+  Future<void> _togglePageNarration(ContentPage page) async {
+    if (_isSpeaking && _speakingContentId == page.contentId) {
+      await _tts.stop();
+      return;
+    }
+
+    final text = _buildNarrationText(page);
+    if (text.isEmpty) return;
+
+    await _tts.stop();
+    setState(() => _speakingContentId = page.contentId);
+    await _tts.speak(text);
   }
 
   void _goToPage(int page) {
@@ -43,11 +126,22 @@ class _ModulePageState extends ConsumerState<ModulePage> {
     );
   }
 
-  Future<void> _sendProgress(int pageIndex) async {
+  Future<void> _sendProgress({
+    required int pageIndex,
+    required ModuleContent content,
+  }) async {
+    if (pageIndex < 0 || pageIndex >= content.contentPages.length) {
+      return;
+    }
+    final page = content.contentPages[pageIndex];
     try {
       await ref
           .read(moduleProgressControllerProvider)
-          .sendProgress(moduleId: widget.moduleId, pageIndex: pageIndex);
+          .sendProgress(
+            moduleId: widget.moduleId,
+            pageIndex: pageIndex,
+            contentId: page.contentId,
+          );
     } catch (_) {
       // Progress errors should not block UI interactions.
     }
@@ -118,14 +212,23 @@ class _ModulePageState extends ConsumerState<ModulePage> {
             controller: _pageController,
             itemCount: totalPages,
             onPageChanged: (page) {
+              unawaited(_tts.stop());
+              if (page > _currentPage) {
+                _sendProgress(pageIndex: _currentPage, content: content);
+              }
               setState(() => _currentPage = page);
-              _sendProgress(page);
             },
             itemBuilder: (context, index) {
               if (hasVideo && index == totalPages - 1) {
                 return _VideoPageView(videoUrl: content.videoUrl!);
               }
-              return _ContentPageView(page: content.contentPages[index]);
+              final contentPage = content.contentPages[index];
+              return _ContentPageView(
+                page: contentPage,
+                isReading:
+                    _isSpeaking && _speakingContentId == contentPage.contentId,
+                onToggleRead: () => _togglePageNarration(contentPage),
+              );
             },
           ),
         ),
@@ -139,7 +242,14 @@ class _ModulePageState extends ConsumerState<ModulePage> {
               ? () => _goToPage(_currentPage + 1)
               : null,
           onComplete: () async {
-            await _sendProgress(_currentPage);
+            final lastContentPageIndex = content.contentPages.length - 1;
+            if (lastContentPageIndex >= 0) {
+              await _sendProgress(
+                pageIndex: lastContentPageIndex,
+                content: content,
+              );
+            }
+            ref.invalidate(modulesControllerProvider);
             if (context.mounted) {
               Navigator.of(context).pop();
             }
@@ -252,9 +362,15 @@ class _PageIndicator extends StatelessWidget {
 }
 
 class _ContentPageView extends StatelessWidget {
-  const _ContentPageView({required this.page});
+  const _ContentPageView({
+    required this.page,
+    required this.isReading,
+    required this.onToggleRead,
+  });
 
   final ContentPage page;
+  final bool isReading;
+  final VoidCallback onToggleRead;
 
   @override
   Widget build(BuildContext context) {
@@ -263,14 +379,41 @@ class _ContentPageView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  page.title,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              IconButton.filledTonal(
+                onPressed: onToggleRead,
+                icon: Icon(
+                  isReading ? Icons.stop_rounded : Icons.volume_up_rounded,
+                  size: 20,
+                ),
+                tooltip: isReading ? 'Sesli okumayı durdur' : 'Sesli oku',
+                style: IconButton.styleFrom(
+                  foregroundColor: _darkPurple,
+                  backgroundColor: _lightPurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
-            page.title,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-              height: 1.3,
-            ),
+            isReading
+                ? 'Sesli okunuyor...'
+                : 'İçeriği sesli dinlemek için butona basın',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
           ),
           const SizedBox(height: 6),
           Container(

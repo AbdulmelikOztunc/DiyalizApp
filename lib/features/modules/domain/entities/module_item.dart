@@ -33,10 +33,15 @@ class ModuleContent {
 }
 
 class ContentPage {
-  const ContentPage({required this.title, required this.sections});
+  const ContentPage({
+    required this.title,
+    required this.sections,
+    this.contentId,
+  });
 
   final String title;
   final List<ContentSection> sections;
+  final String? contentId;
 }
 
 class ContentSection {

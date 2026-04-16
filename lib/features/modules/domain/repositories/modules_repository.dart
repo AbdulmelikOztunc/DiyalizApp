@@ -7,5 +7,6 @@ abstract class ModulesRepository {
   Future<ApiResult<void>> sendProgress({
     required String moduleId,
     required int pageIndex,
+    String? contentId,
   });
 }

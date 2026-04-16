@@ -6,6 +6,10 @@ class ApiEndpoints {
   static const profile = 'auth/profile.php';
   static const updatePhone = 'auth/update_phone.php';
   static const myModules = 'modules/list.php';
+  static const moduleDetail = 'modules/detail.php';
+  static const contentDetail = 'contents/detail.php';
+  static const progressUpdate = 'progress/update.php';
+  static const progressSummary = 'progress/summary.php';
   static const moduleContent = 'modules/content.php';
   static const moduleProgress = 'modules/progress.php';
   static String moduleContentLegacy(String moduleId) =>

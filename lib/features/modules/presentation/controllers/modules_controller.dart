@@ -50,26 +50,33 @@ final moduleContentProvider = FutureProvider.family<ModuleContent?, String>((
   return switch (result) {
     ApiSuccess<ModuleContent>(:final data) when data.contentPages.isNotEmpty =>
       data,
-    ApiSuccess<ModuleContent>() => moduleId == '1' ? kModule1Content : null,
-    ApiFailure<ModuleContent>() => moduleId == '1' ? kModule1Content : null,
+    ApiSuccess<ModuleContent>() => null,
+    ApiFailure<ModuleContent>() => null,
   };
 });
 
 final moduleProgressControllerProvider = Provider<ModuleProgressController>((
   ref,
 ) {
-  return ModuleProgressController(ref.read(modulesRepositoryProvider));
+  return ModuleProgressController(ref);
 });
 
 class ModuleProgressController {
-  ModuleProgressController(this._repository);
+  ModuleProgressController(this._ref);
 
-  final ModulesRepository _repository;
+  final Ref _ref;
 
   Future<void> sendProgress({
     required String moduleId,
     required int pageIndex,
+    String? contentId,
   }) async {
-    await _repository.sendProgress(moduleId: moduleId, pageIndex: pageIndex);
+    await _ref
+        .read(modulesRepositoryProvider)
+        .sendProgress(
+          moduleId: moduleId,
+          pageIndex: pageIndex,
+          contentId: contentId,
+        );
   }
 }
