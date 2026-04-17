@@ -37,11 +37,15 @@ class ContentPage {
     required this.title,
     required this.sections,
     this.contentId,
+    this.mediaUrl,
+    this.mediaType,
   });
 
   final String title;
   final List<ContentSection> sections;
   final String? contentId;
+  final String? mediaUrl;
+  final String? mediaType;
 }
 
 class ContentSection {

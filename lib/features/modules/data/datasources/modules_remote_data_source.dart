@@ -19,8 +19,10 @@ class ModulesRemoteDataSource {
       ApiEndpoints.moduleDetail,
       queryParameters: {'id': parsedModuleId ?? moduleId},
     );
-    if (detailResult case ApiSuccess<Map<String, dynamic>>()) {
-      return detailResult;
+    if (detailResult case ApiSuccess<Map<String, dynamic>>(:final data)) {
+      if (_hasUsableContentPayload(data)) {
+        return detailResult;
+      }
     }
 
     final primaryResult = await _apiClient.get(
@@ -32,6 +34,23 @@ class ModulesRemoteDataSource {
     }
 
     return _apiClient.get(ApiEndpoints.moduleContentLegacy(moduleId));
+  }
+
+  bool _hasUsableContentPayload(Map<String, dynamic> data) {
+    final rootContents = data['contents'];
+    if (rootContents is List && rootContents.isNotEmpty) return true;
+    final module = data['module'];
+    if (module is Map<String, dynamic>) {
+      final moduleContents = module['contents'];
+      if (moduleContents is List && moduleContents.isNotEmpty) return true;
+      final moduleContent = module['content'];
+      if (moduleContent is Map<String, dynamic>) return true;
+    }
+    final directContent = data['content'];
+    if (directContent is Map<String, dynamic>) return true;
+    final contentPages = data['content_pages'] ?? data['contentPages'];
+    if (contentPages is List && contentPages.isNotEmpty) return true;
+    return false;
   }
 
   Future<ApiResult<Map<String, dynamic>>> getContentDetail(String contentId) {

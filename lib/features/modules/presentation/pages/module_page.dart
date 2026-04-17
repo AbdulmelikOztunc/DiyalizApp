@@ -5,6 +5,7 @@ import 'package:diyalizmobile/features/modules/presentation/controllers/modules_
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 const _primaryPurple = Color(0xFF7C3AED);
@@ -372,6 +373,16 @@ class _ContentPageView extends StatelessWidget {
   final bool isReading;
   final VoidCallback onToggleRead;
 
+  bool get _isVideoContent {
+    final type = page.mediaType?.toLowerCase();
+    if (type == 'video') return true;
+    final mediaUrl = page.mediaUrl?.toLowerCase() ?? '';
+    return mediaUrl.endsWith('.mp4') ||
+        mediaUrl.endsWith('.mov') ||
+        mediaUrl.endsWith('.m3u8') ||
+        mediaUrl.endsWith('.webm');
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -425,11 +436,168 @@ class _ContentPageView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+          if (page.mediaUrl != null && page.mediaUrl!.isNotEmpty) ...[
+            _isVideoContent
+                ? _InlineNetworkVideo(mediaUrl: page.mediaUrl!)
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _mediumPurple.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      child: Image.network(
+                        page.mediaUrl!,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const SizedBox(
+                            height: 180,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: _primaryPurple,
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, error, stackTrace) => Container(
+                          height: 120,
+                          color: _lightPurple,
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'Görsel yüklenemedi',
+                            style: TextStyle(
+                              color: _darkPurple,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+            const SizedBox(height: 20),
+          ],
           for (final section in page.sections) ...[
             _SectionWidget(section: section),
             const SizedBox(height: 20),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _InlineNetworkVideo extends StatefulWidget {
+  const _InlineNetworkVideo({required this.mediaUrl});
+
+  final String mediaUrl;
+
+  @override
+  State<_InlineNetworkVideo> createState() => _InlineNetworkVideoState();
+}
+
+class _InlineNetworkVideoState extends State<_InlineNetworkVideo> {
+  late final VideoPlayerController _controller;
+  late final Future<void> _initializeFuture;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl));
+    _initializeFuture = _controller.initialize().catchError((_) {
+      if (!mounted) return;
+      setState(() => _hasError = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _togglePlayPause() {
+    if (!_controller.value.isInitialized) return;
+    setState(() {
+      if (_controller.value.isPlaying) {
+        _controller.pause();
+      } else {
+        _controller.play();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
+        color: Colors.black,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: FutureBuilder<void>(
+          future: _initializeFuture,
+          builder: (context, snapshot) {
+            if (_hasError || snapshot.hasError) {
+              return Container(
+                height: 180,
+                color: _lightPurple,
+                alignment: Alignment.center,
+                child: const Text(
+                  'Video yüklenemedi',
+                  style: TextStyle(
+                    color: _darkPurple,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              );
+            }
+            if (snapshot.connectionState != ConnectionState.done ||
+                !_controller.value.isInitialized) {
+              return const SizedBox(
+                height: 180,
+                child: Center(
+                  child: CircularProgressIndicator(color: _primaryPurple),
+                ),
+              );
+            }
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                AspectRatio(
+                  aspectRatio: _controller.value.aspectRatio == 0
+                      ? 16 / 9
+                      : _controller.value.aspectRatio,
+                  child: VideoPlayer(_controller),
+                ),
+                IconButton.filled(
+                  onPressed: _togglePlayPause,
+                  icon: Icon(
+                    _controller.value.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    size: 28,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

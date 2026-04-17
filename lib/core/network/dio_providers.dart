@@ -18,7 +18,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl:
-          'https://lawngreen-turkey-839921.hostingersite.com/Diyaliz_App/api/v1/',
+      'http://diyalizapp.com.tr/Diyaliz_App/api/v1/',
+          //'https://lawngreen-turkey-839921.hostingersite.com/Diyaliz_App/api/v1/',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       sendTimeout: const Duration(seconds: 15),

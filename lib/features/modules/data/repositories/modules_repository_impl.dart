@@ -7,6 +7,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
   ModulesRepositoryImpl(this._remoteDataSource);
 
   final ModulesRemoteDataSource _remoteDataSource;
+  static const _mediaRootUrl = 'http://diyalizapp.com.tr';
 
   @override
   Future<ApiResult<ModuleContent>> getModuleContent(String moduleId) async {
@@ -120,14 +121,25 @@ class ModulesRepositoryImpl implements ModulesRepository {
       'content_pages',
       'pages',
       'contents',
+      'content_list',
+      'module_contents',
     ]);
     if (pagesFromRoot.isNotEmpty) return pagesFromRoot;
-    return _extractList(moduleMap, const [
+    final pagesFromModule = _extractList(moduleMap, const [
       'contentPages',
       'content_pages',
       'pages',
       'contents',
+      'content_list',
+      'module_contents',
     ]);
+    if (pagesFromModule.isNotEmpty) return pagesFromModule;
+
+    final contentFromRoot = _extractMap(root['content']);
+    if (contentFromRoot != null) return <dynamic>[contentFromRoot];
+    final contentFromModule = _extractMap(moduleMap['content']);
+    if (contentFromModule != null) return <dynamic>[contentFromModule];
+    return <dynamic>[];
   }
 
   Future<List<ContentPage>> _mapContentPages({
@@ -164,6 +176,8 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return ContentPage(
         contentId: contentId,
         title: title,
+        mediaUrl: _extractMediaUrl(page),
+        mediaType: _extractMediaType(page),
         sections: sectionsRaw.map((s) => _mapContentSectionFromRaw(s)).toList(),
       );
     }
@@ -179,6 +193,8 @@ class ModulesRepositoryImpl implements ModulesRepository {
             'title',
             'name',
           ], fallback: title),
+          mediaUrl: _extractMediaUrl(detailMap),
+          mediaType: _extractMediaType(detailMap),
           sections: _mapSectionsFromDetail(detailMap),
         );
       }
@@ -193,6 +209,8 @@ class ModulesRepositoryImpl implements ModulesRepository {
     return ContentPage(
       contentId: contentId,
       title: title,
+      mediaUrl: _extractMediaUrl(page),
+      mediaType: _extractMediaType(page),
       sections: fallbackBody.isEmpty
           ? const <ContentSection>[]
           : <ContentSection>[ContentSection(body: fallbackBody)],
@@ -255,6 +273,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
     String? heading;
     final bodyParts = <String>[];
     final points = <String>[];
+    var cursor = 0;
 
     void flush() {
       final body = bodyParts.join('\n\n').trim();
@@ -275,17 +294,30 @@ class ModulesRepositoryImpl implements ModulesRepository {
       points.clear();
     }
 
+    void appendPlainText(String rawText) {
+      final plain = _cleanHtmlText(rawText);
+      if (plain.isNotEmpty) {
+        bodyParts.add(plain);
+      }
+    }
+
     for (final block in blocks) {
+      if (block.start > cursor) {
+        appendPlainText(source.substring(cursor, block.start));
+      }
+
       final tag = (block.group(1) ?? '').toLowerCase();
       final inner = block.group(2) ?? '';
       if (tag.startsWith('h')) {
         flush();
         heading = _cleanHtmlText(inner);
+        cursor = block.end;
         continue;
       }
       if (tag == 'p') {
         final paragraph = _cleanHtmlText(inner);
         if (paragraph.isNotEmpty) bodyParts.add(paragraph);
+        cursor = block.end;
         continue;
       }
       if (tag == 'ul' || tag == 'ol') {
@@ -298,7 +330,15 @@ class ModulesRepositoryImpl implements ModulesRepository {
           final text = _cleanHtmlText(li.group(1) ?? '');
           if (text.isNotEmpty) points.add(text);
         }
+        if (points.isEmpty) {
+          appendPlainText(inner);
+        }
       }
+      cursor = block.end;
+    }
+
+    if (cursor < source.length) {
+      appendPlainText(source.substring(cursor));
     }
 
     flush();
@@ -332,6 +372,59 @@ class ModulesRepositoryImpl implements ModulesRepository {
     text = text.replaceAll(RegExp(r'\n\s+'), '\n');
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     return text.trim();
+  }
+
+  String? _extractMediaUrl(Map<String, dynamic> map) {
+    final raw = _toNullableStringValue(map, const [
+      'media_file',
+      'mediaUrl',
+      'media_url',
+      'image',
+      'image_url',
+    ]);
+    if (raw == null || raw.isEmpty) return null;
+
+    final normalized = raw.trim();
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return Uri.encodeFull(normalized);
+    }
+    if (normalized.startsWith('//')) {
+      return Uri.encodeFull('http:$normalized');
+    }
+
+    final mediaRootUri = Uri.parse(_mediaRootUrl);
+    final path = normalized.startsWith('/') ? normalized : '/$normalized';
+    return Uri.encodeFull(mediaRootUri.resolve(path).toString());
+  }
+
+  String? _extractMediaType(Map<String, dynamic> map) {
+    final explicitType = _toNullableStringValue(map, const [
+      'content_type',
+      'media_type',
+      'type',
+    ]);
+    if (explicitType != null && explicitType.isNotEmpty) {
+      return explicitType.toLowerCase();
+    }
+
+    final mediaUrl = _extractMediaUrl(map);
+    if (mediaUrl == null) return null;
+    final uri = Uri.tryParse(mediaUrl);
+    final path = (uri?.path ?? mediaUrl).toLowerCase();
+    if (path.endsWith('.mp4') ||
+        path.endsWith('.mov') ||
+        path.endsWith('.m3u8') ||
+        path.endsWith('.webm')) {
+      return 'video';
+    }
+    if (path.endsWith('.jpg') ||
+        path.endsWith('.jpeg') ||
+        path.endsWith('.png') ||
+        path.endsWith('.webp') ||
+        path.endsWith('.gif')) {
+      return 'image';
+    }
+    return null;
   }
 
   List<dynamic> _extractSections(Map<String, dynamic> page) {
