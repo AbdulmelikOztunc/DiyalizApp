@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:diyalizmobile/core/network/api_error.dart';
 import 'package:diyalizmobile/core/network/api_result.dart';
 import 'package:dio/dio.dart';
@@ -12,11 +14,11 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<dynamic>(
         path,
         queryParameters: queryParameters,
       );
-      return ApiSuccess(response.data ?? <String, dynamic>{});
+      return ApiSuccess(_asMap(response.data));
     } on DioException catch (e) {
       return ApiFailure(_toApiError(e));
     }
@@ -27,11 +29,43 @@ class ApiClient {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await _dio.post<Map<String, dynamic>>(path, data: data);
-      return ApiSuccess(response.data ?? <String, dynamic>{});
+      final response = await _dio.post<dynamic>(path, data: data);
+      return ApiSuccess(_asMap(response.data));
     } on DioException catch (e) {
       return ApiFailure(_toApiError(e));
     }
+  }
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    if (raw == null) return <String, dynamic>{};
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+    }
+    if (raw is List) {
+      return <String, dynamic>{'items': raw};
+    }
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          return decoded.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+        }
+        if (decoded is List) {
+          return <String, dynamic>{'items': decoded};
+        }
+      } catch (_) {
+        // fall through
+      }
+      return <String, dynamic>{'raw': raw};
+    }
+    return <String, dynamic>{'raw': raw};
   }
 
   ApiError _toApiError(DioException e) {

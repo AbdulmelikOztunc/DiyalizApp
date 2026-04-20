@@ -1,10 +1,12 @@
 import 'package:diyalizmobile/core/network/dio_providers.dart';
 import 'package:diyalizmobile/core/network/api_result.dart';
+import 'package:diyalizmobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:diyalizmobile/features/modules/data/datasources/modules_remote_data_source.dart';
 import 'package:diyalizmobile/features/modules/data/repositories/modules_repository_impl.dart';
 import 'package:diyalizmobile/features/modules/data/static_module_data.dart';
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
 import 'package:diyalizmobile/features/modules/domain/repositories/modules_repository.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final modulesRepositoryProvider = Provider<ModulesRepository>((ref) {
@@ -21,16 +23,39 @@ final modulesControllerProvider =
 class ModulesController extends AsyncNotifier<List<ModuleItem>> {
   @override
   Future<List<ModuleItem>> build() async {
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((s) => s.isAuthenticated),
+    );
+
+    if (!isAuthenticated) {
+      return kStaticModules;
+    }
+
     return _loadModules();
   }
 
   Future<List<ModuleItem>> _loadModules() async {
     final result = await ref.read(modulesRepositoryProvider).getMyModules();
-    return switch (result) {
-      ApiSuccess<List<ModuleItem>>(:final data) when data.isNotEmpty => data,
-      ApiSuccess<List<ModuleItem>>() => kStaticModules,
-      ApiFailure<List<ModuleItem>>() => kStaticModules,
-    };
+    switch (result) {
+      case ApiSuccess<List<ModuleItem>>(:final data):
+        if (data.isEmpty) {
+          debugPrint(
+            '[ModulesController] API basarili ama modul listesi bos geldi, statik veriye dusuluyor.',
+          );
+          return kStaticModules;
+        }
+        return data;
+      case ApiFailure<List<ModuleItem>>(:final error):
+        debugPrint(
+          '[ModulesController] Modul listesi alinamadi (status: ${error.statusCode}, code: ${error.code}, message: ${error.message}). Statik veriye dusuluyor.',
+        );
+        return kStaticModules;
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(_loadModules);
   }
 
   bool isModuleUnlocked(String moduleId) {

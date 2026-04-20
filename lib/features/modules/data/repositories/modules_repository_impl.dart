@@ -55,22 +55,58 @@ class ModulesRepositoryImpl implements ModulesRepository {
     }
 
     final data = (response as ApiSuccess<Map<String, dynamic>>).data;
-    final modulesRaw = data['modules'] as List<dynamic>? ?? <dynamic>[];
-    final modules = modulesRaw.map((raw) {
-      final item = raw as Map<String, dynamic>;
-      final idValue = item['id'];
-      final weekValue = item['weekNumber'] ?? item['sort_order'];
-      final unlockedValue = item['isUnlocked'] ?? item['is_unlocked'];
-      return ModuleItem(
-        id: idValue?.toString() ?? '',
-        title: item['title'] as String? ?? 'Modul',
-        description: item['description'] as String? ?? '',
-        weekNumber: _toInt(weekValue),
-        isUnlocked: _toBool(unlockedValue),
-        iconName: _toStringValue(item, const ['icon', 'icon_name', 'iconName']),
-      );
-    }).toList();
+    final modulesRaw = _extractModulesList(data);
+    final modules = modulesRaw
+        .whereType<Map>()
+        .map((raw) {
+          final item = raw.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+          final idValue = item['id'];
+          final weekValue =
+              item['weekNumber'] ?? item['sort_order'] ?? item['week_number'];
+          final unlockedValue =
+              item['isUnlocked'] ?? item['is_unlocked'] ?? item['unlocked'];
+          return ModuleItem(
+            id: idValue?.toString() ?? '',
+            title: _toStringValue(
+              item,
+              const ['title', 'name', 'module_title'],
+              fallback: 'Modul',
+            ),
+            description: _toStringValue(
+              item,
+              const ['description', 'desc', 'summary'],
+            ),
+            weekNumber: _toInt(weekValue),
+            isUnlocked: _toBool(unlockedValue),
+            iconName: _toStringValue(
+              item,
+              const ['icon', 'icon_name', 'iconName'],
+            ),
+          );
+        })
+        .where((m) => m.id.isNotEmpty)
+        .toList();
     return ApiSuccess(modules);
+  }
+
+  List<dynamic> _extractModulesList(Map<String, dynamic> data) {
+    final direct = data['modules'];
+    if (direct is List) return direct;
+
+    final nested = data['data'];
+    if (nested is Map) {
+      final modulesKey = nested['modules'];
+      if (modulesKey is List) return modulesKey;
+      final itemsKey = nested['items'];
+      if (itemsKey is List) return itemsKey;
+    }
+
+    final items = data['items'];
+    if (items is List) return items;
+
+    return const <dynamic>[];
   }
 
   @override

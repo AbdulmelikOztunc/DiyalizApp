@@ -77,6 +77,27 @@ class _ModulePageState extends ConsumerState<ModulePage> {
     await _tts.setVolume(1.0);
   }
 
+  /// Android (ve bazı motorlar) uzun TAMAMEN BÜYÜK HARF kelimeleri kısaltma
+  /// sanıp harf harf okur. TTS için kelimeyi cümle biçimine çevirir.
+  static String _normalizeShoutingCapsForTts(String text) {
+    return text.replaceAllMapped(RegExp(r'\S+'), (m) {
+      final token = m.group(0)!;
+      final letters = token.characters.where((ch) {
+        final lower = ch.toLowerCase();
+        final upper = ch.toUpperCase();
+        return lower != upper;
+      }).join();
+      if (letters.length < 3) return token;
+      if (letters != letters.toUpperCase()) return token;
+
+      final lowerToken = token.toLowerCase();
+      if (lowerToken.isEmpty) return token;
+      final first = lowerToken.characters.first.toUpperCase();
+      final rest = lowerToken.characters.skip(1).join();
+      return '$first$rest';
+    });
+  }
+
   String _buildNarrationText(ContentPage page) {
     final buffer = StringBuffer(page.title);
     for (final section in page.sections) {
@@ -102,7 +123,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
         }
       }
     }
-    return buffer.toString();
+    return _normalizeShoutingCapsForTts(buffer.toString());
   }
 
   Future<void> _togglePageNarration(ContentPage page) async {

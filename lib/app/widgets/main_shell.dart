@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:diyalizmobile/features/question/presentation/controllers/question_controller.dart';
 import 'package:go_router/go_router.dart';
 
 const _navbarPurple = Color(0xFF7C3AED);
 const _navbarLightPurple = Color(0xFFF3F0FF);
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
@@ -20,7 +22,7 @@ class MainShell extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
@@ -29,6 +31,9 @@ class MainShell extends StatelessWidget {
         backgroundColor: Colors.white,
         indicatorColor: _navbarLightPurple,
         onDestinationSelected: (index) {
+          if (_tabs[index].route == '/ask') {
+            ref.read(questionControllerProvider.notifier).loadQuestions();
+          }
           navigationShell.goBranch(
             index,
             initialLocation: index == navigationShell.currentIndex,
