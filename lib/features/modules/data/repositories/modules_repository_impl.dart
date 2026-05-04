@@ -59,9 +59,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
     final modules = modulesRaw
         .whereType<Map>()
         .map((raw) {
-          final item = raw.map(
-            (key, value) => MapEntry(key.toString(), value),
-          );
+          final item = raw.map((key, value) => MapEntry(key.toString(), value));
           final idValue = item['id'];
           final weekValue =
               item['weekNumber'] ?? item['sort_order'] ?? item['week_number'];
@@ -69,21 +67,23 @@ class ModulesRepositoryImpl implements ModulesRepository {
               item['isUnlocked'] ?? item['is_unlocked'] ?? item['unlocked'];
           return ModuleItem(
             id: idValue?.toString() ?? '',
-            title: _toStringValue(
-              item,
-              const ['title', 'name', 'module_title'],
-              fallback: 'Modul',
-            ),
-            description: _toStringValue(
-              item,
-              const ['description', 'desc', 'summary'],
-            ),
+            title: _toStringValue(item, const [
+              'title',
+              'name',
+              'module_title',
+            ], fallback: 'Modul'),
+            description: _toStringValue(item, const [
+              'description',
+              'desc',
+              'summary',
+            ]),
             weekNumber: _toInt(weekValue),
             isUnlocked: _toBool(unlockedValue),
-            iconName: _toStringValue(
-              item,
-              const ['icon', 'icon_name', 'iconName'],
-            ),
+            iconName: _toStringValue(item, const [
+              'icon',
+              'icon_name',
+              'iconName',
+            ]),
           );
         })
         .where((m) => m.id.isNotEmpty)
@@ -214,6 +214,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
         title: title,
         mediaUrl: _extractMediaUrl(page),
         mediaType: _extractMediaType(page),
+        mediaPosition: _extractMediaPosition(page),
         sections: sectionsRaw.map((s) => _mapContentSectionFromRaw(s)).toList(),
       );
     }
@@ -231,6 +232,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
           ], fallback: title),
           mediaUrl: _extractMediaUrl(detailMap),
           mediaType: _extractMediaType(detailMap),
+          mediaPosition: _extractMediaPosition(detailMap),
           sections: _mapSectionsFromDetail(detailMap),
         );
       }
@@ -247,6 +249,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
       title: title,
       mediaUrl: _extractMediaUrl(page),
       mediaType: _extractMediaType(page),
+      mediaPosition: _extractMediaPosition(page),
       sections: fallbackBody.isEmpty
           ? const <ContentSection>[]
           : <ContentSection>[ContentSection(body: fallbackBody)],
@@ -271,6 +274,12 @@ class ModulesRepositoryImpl implements ModulesRepository {
       ]),
       body: _toStringValue(section, const ['body', 'text', 'content']),
       keyPoints: keyPointsRaw.isEmpty ? null : keyPointsRaw,
+      bodyAfter: _toNullableStringValue(section, const [
+        'body_after',
+        'bodyAfter',
+        'after',
+        'footer',
+      ]),
     );
   }
 
@@ -307,33 +316,63 @@ class ModulesRepositoryImpl implements ModulesRepository {
 
     final sections = <ContentSection>[];
     String? heading;
-    final bodyParts = <String>[];
-    final points = <String>[];
+    final prefixParts = <String>[];
+    final suffixParts = <String>[];
+    final listPoints = <String>[];
+    var afterList = false;
     var cursor = 0;
 
     void flush() {
-      final body = bodyParts.join('\n\n').trim();
+      final prefix = prefixParts.join('\n\n').trim();
+      final suffix = suffixParts.join('\n\n').trim();
+      final hasPoints = listPoints.isNotEmpty;
       if ((heading == null || heading!.isEmpty) &&
-          body.isEmpty &&
-          points.isEmpty) {
+          prefix.isEmpty &&
+          !hasPoints &&
+          suffix.isEmpty) {
         return;
       }
+
+      String body;
+      String? bodyAfter;
+      if (hasPoints) {
+        body = prefix.isEmpty ? ' ' : prefix;
+        bodyAfter = suffix.isEmpty ? null : suffix;
+      } else {
+        if (prefix.isNotEmpty && suffix.isNotEmpty) {
+          body = '$prefix\n\n$suffix'.trim();
+          bodyAfter = null;
+        } else if (suffix.isNotEmpty) {
+          body = suffix;
+          bodyAfter = null;
+        } else {
+          body = prefix.isEmpty ? ' ' : prefix;
+          bodyAfter = null;
+        }
+      }
+
       sections.add(
         ContentSection(
           heading: heading,
-          body: body.isEmpty ? ' ' : body,
-          keyPoints: points.isEmpty ? null : List<String>.from(points),
+          body: body,
+          keyPoints: hasPoints ? List<String>.from(listPoints) : null,
+          bodyAfter: bodyAfter,
         ),
       );
       heading = null;
-      bodyParts.clear();
-      points.clear();
+      prefixParts.clear();
+      suffixParts.clear();
+      listPoints.clear();
+      afterList = false;
     }
 
     void appendPlainText(String rawText) {
       final plain = _cleanHtmlText(rawText);
-      if (plain.isNotEmpty) {
-        bodyParts.add(plain);
+      if (plain.isEmpty) return;
+      if (afterList) {
+        suffixParts.add(plain);
+      } else {
+        prefixParts.add(plain);
       }
     }
 
@@ -352,7 +391,13 @@ class ModulesRepositoryImpl implements ModulesRepository {
       }
       if (tag == 'p') {
         final paragraph = _cleanHtmlText(inner);
-        if (paragraph.isNotEmpty) bodyParts.add(paragraph);
+        if (paragraph.isNotEmpty) {
+          if (afterList) {
+            suffixParts.add(paragraph);
+          } else {
+            prefixParts.add(paragraph);
+          }
+        }
         cursor = block.end;
         continue;
       }
@@ -362,12 +407,21 @@ class ModulesRepositoryImpl implements ModulesRepository {
           caseSensitive: false,
           dotAll: true,
         );
+        final newPoints = <String>[];
         for (final li in liRegex.allMatches(inner)) {
           final text = _cleanHtmlText(li.group(1) ?? '');
-          if (text.isNotEmpty) points.add(text);
+          if (text.isNotEmpty) newPoints.add(text);
         }
-        if (points.isEmpty) {
+        if (newPoints.isEmpty) {
           appendPlainText(inner);
+        } else {
+          if (listPoints.isNotEmpty) {
+            flush();
+          }
+          listPoints
+            ..clear()
+            ..addAll(newPoints);
+          afterList = true;
         }
       }
       cursor = block.end;
@@ -380,7 +434,10 @@ class ModulesRepositoryImpl implements ModulesRepository {
     flush();
     return sections
         .where(
-          (s) => s.body.trim().isNotEmpty || (s.keyPoints?.isNotEmpty ?? false),
+          (s) =>
+              s.body.trim().isNotEmpty ||
+              (s.keyPoints?.isNotEmpty ?? false) ||
+              (s.bodyAfter?.trim().isNotEmpty ?? false),
         )
         .toList();
   }
@@ -461,6 +518,20 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return 'image';
     }
     return null;
+  }
+
+  String _extractMediaPosition(Map<String, dynamic> map) {
+    final raw = _toNullableStringValue(map, const [
+      'media_position',
+      'mediaPosition',
+    ])?.toLowerCase().trim();
+    if (raw == 'above' || raw == 'top' || raw == 'before') {
+      return 'above';
+    }
+    if (raw == 'below' || raw == 'bottom' || raw == 'after') {
+      return 'below';
+    }
+    return 'below';
   }
 
   List<dynamic> _extractSections(Map<String, dynamic> page) {

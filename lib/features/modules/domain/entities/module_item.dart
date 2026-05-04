@@ -39,6 +39,7 @@ class ContentPage {
     this.contentId,
     this.mediaUrl,
     this.mediaType,
+    this.mediaPosition = 'below',
   });
 
   final String title;
@@ -46,12 +47,23 @@ class ContentPage {
   final String? contentId;
   final String? mediaUrl;
   final String? mediaType;
+
+  /// API: `above` | `below` (ve `top`/`before` → above, `bottom`/`after` → below).
+  final String mediaPosition;
 }
 
 class ContentSection {
-  const ContentSection({required this.body, this.heading, this.keyPoints});
+  const ContentSection({
+    required this.body,
+    this.heading,
+    this.keyPoints,
+    this.bodyAfter,
+  });
 
   final String? heading;
   final String body;
   final List<String>? keyPoints;
+
+  /// Madde kutusunun altında gösterilecek metin (`ul`/`ol` sonrası paragraflar).
+  final String? bodyAfter;
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -26,6 +28,7 @@ class ModulePage extends ConsumerStatefulWidget {
 class _ModulePageState extends ConsumerState<ModulePage> {
   late final PageController _pageController;
   late final FlutterTts _tts;
+  late final Future<void> _ttsReady;
   int _currentPage = 0;
   bool _isSpeaking = false;
   String? _speakingContentId;
@@ -60,7 +63,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
           _speakingContentId = null;
         });
       });
-    unawaited(_configureTts());
+    _ttsReady = _configureTts();
   }
 
   @override
@@ -71,8 +74,23 @@ class _ModulePageState extends ConsumerState<ModulePage> {
   }
 
   Future<void> _configureTts() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      // Önce kategori, sonra setActive — ters sırada iOS'ta ses çıkmayabiliyor.
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          IosTextToSpeechAudioCategoryOptions.duckOthers,
+        ],
+        IosTextToSpeechAudioMode.spokenAudio,
+      );
+      await _tts.setSharedInstance(true);
+      // true iken utterance bitince session kapanıyor; sonraki speak sessiz kalabiliyor.
+      await _tts.autoStopSharedSession(false);
+    }
+
     await _tts.setLanguage('tr-TR');
-    await _tts.setSpeechRate(0.45);
+    await _tts.setSpeechRate(0.52);
     await _tts.setPitch(1.0);
     await _tts.setVolume(1.0);
   }
@@ -108,7 +126,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
           ..write(heading);
       }
 
-      if (section.body.isNotEmpty) {
+      if (section.body.trim().isNotEmpty) {
         buffer
           ..write('. ')
           ..write(section.body);
@@ -122,11 +140,19 @@ class _ModulePageState extends ConsumerState<ModulePage> {
             ..write(point);
         }
       }
+
+      final after = section.bodyAfter;
+      if (after != null && after.trim().isNotEmpty) {
+        buffer
+          ..write('. ')
+          ..write(after);
+      }
     }
     return _normalizeShoutingCapsForTts(buffer.toString());
   }
 
   Future<void> _togglePageNarration(ContentPage page) async {
+    await _ttsReady;
     if (_isSpeaking && _speakingContentId == page.contentId) {
       await _tts.stop();
       return;
@@ -137,7 +163,10 @@ class _ModulePageState extends ConsumerState<ModulePage> {
 
     await _tts.stop();
     setState(() => _speakingContentId = page.contentId);
-    await _tts.speak(text);
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      await _tts.setSharedInstance(true);
+    }
+    await _tts.speak(text, focus: true);
   }
 
   void _goToPage(int page) {
@@ -390,6 +419,8 @@ class _ContentPageView extends StatelessWidget {
     required this.onToggleRead,
   });
 
+  static const double _horizontalInset = 20;
+
   final ContentPage page;
   final bool isReading;
   final VoidCallback onToggleRead;
@@ -404,10 +435,71 @@ class _ContentPageView extends StatelessWidget {
         mediaUrl.endsWith('.webm');
   }
 
+  bool get _mediaAbove {
+    final p = page.mediaPosition.toLowerCase();
+    return p == 'above' || p == 'top' || p == 'before';
+  }
+
+  bool get _hasMedia =>
+      page.mediaUrl != null && page.mediaUrl!.trim().isNotEmpty;
+
+  /// Medya, `SingleChildScrollView` yatay padding’i ile aynı genişlikte kalmalı;
+  /// ekran genişliğinde widget kullanmak `UnconstrainedBox` / tam genişlik hilesiyle
+  /// RenderConstraintsTransformBox taşma hatasına yol açıyor.
+  Widget _mediaBlock(BuildContext context, {required double width}) {
+    final url = page.mediaUrl!;
+    if (_isVideoContent) {
+      return SizedBox(
+        width: width,
+        child: _InlineNetworkVideo(mediaUrl: url),
+      );
+    }
+    return SizedBox(
+      width: width,
+      child: Image.network(
+        url,
+        width: width,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return SizedBox(
+            width: width,
+            height: 180,
+            child: const Center(
+              child: CircularProgressIndicator(color: _primaryPurple),
+            ),
+          );
+        },
+        errorBuilder: (_, error, stackTrace) => SizedBox(
+          width: width,
+          height: 120,
+          child: Container(
+            color: _lightPurple,
+            alignment: Alignment.center,
+            child: const Text(
+              'Görsel yüklenemedi',
+              style: TextStyle(
+                color: _darkPurple,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      padding: const EdgeInsets.fromLTRB(
+        _horizontalInset,
+        20,
+        _horizontalInset,
+        24,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -456,56 +548,24 @@ class _ContentPageView extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 20),
-          if (page.mediaUrl != null && page.mediaUrl!.isNotEmpty) ...[
-            _isVideoContent
-                ? _InlineNetworkVideo(mediaUrl: page.mediaUrl!)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: _mediumPurple.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      child: Image.network(
-                        page.mediaUrl!,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const SizedBox(
-                            height: 180,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: _primaryPurple,
-                              ),
-                            ),
-                          );
-                        },
-                        errorBuilder: (_, error, stackTrace) => Container(
-                          height: 120,
-                          color: _lightPurple,
-                          alignment: Alignment.center,
-                          child: const Text(
-                            'Görsel yüklenemedi',
-                            style: TextStyle(
-                              color: _darkPurple,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+          if (_hasMedia && _mediaAbove) ...[
+            const SizedBox(height: 20),
+            LayoutBuilder(
+              builder: (context, constraints) =>
+                  _mediaBlock(context, width: constraints.maxWidth),
+            ),
             const SizedBox(height: 20),
           ],
           for (final section in page.sections) ...[
             _SectionWidget(section: section),
             const SizedBox(height: 20),
+          ],
+          if (_hasMedia && !_mediaAbove) ...[
+            LayoutBuilder(
+              builder: (context, constraints) =>
+                  _mediaBlock(context, width: constraints.maxWidth),
+            ),
+            const SizedBox(height: 8),
           ],
         ],
       ),
@@ -557,68 +617,65 @@ class _InlineNetworkVideoState extends State<_InlineNetworkVideo> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
+        border: Border.symmetric(
+          horizontal: BorderSide(color: _mediumPurple.withValues(alpha: 0.35)),
+        ),
         color: Colors.black,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: FutureBuilder<void>(
-          future: _initializeFuture,
-          builder: (context, snapshot) {
-            if (_hasError || snapshot.hasError) {
-              return Container(
-                height: 180,
-                color: _lightPurple,
-                alignment: Alignment.center,
-                child: const Text(
-                  'Video yüklenemedi',
-                  style: TextStyle(
-                    color: _darkPurple,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              );
-            }
-            if (snapshot.connectionState != ConnectionState.done ||
-                !_controller.value.isInitialized) {
-              return const SizedBox(
-                height: 180,
-                child: Center(
-                  child: CircularProgressIndicator(color: _primaryPurple),
-                ),
-              );
-            }
-
-            return Stack(
+      child: FutureBuilder<void>(
+        future: _initializeFuture,
+        builder: (context, snapshot) {
+          if (_hasError || snapshot.hasError) {
+            return Container(
+              height: 180,
+              color: _lightPurple,
               alignment: Alignment.center,
-              children: [
-                AspectRatio(
-                  aspectRatio: _controller.value.aspectRatio == 0
-                      ? 16 / 9
-                      : _controller.value.aspectRatio,
-                  child: VideoPlayer(_controller),
+              child: const Text(
+                'Video yüklenemedi',
+                style: TextStyle(
+                  color: _darkPurple,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-                IconButton.filled(
-                  onPressed: _togglePlayPause,
-                  icon: Icon(
-                    _controller.value.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 28,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black54,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
+              ),
             );
-          },
-        ),
+          }
+          if (snapshot.connectionState != ConnectionState.done ||
+              !_controller.value.isInitialized) {
+            return const SizedBox(
+              height: 180,
+              child: Center(
+                child: CircularProgressIndicator(color: _primaryPurple),
+              ),
+            );
+          }
+
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              AspectRatio(
+                aspectRatio: _controller.value.aspectRatio == 0
+                    ? 16 / 9
+                    : _controller.value.aspectRatio,
+                child: VideoPlayer(_controller),
+              ),
+              IconButton.filled(
+                onPressed: _togglePlayPause,
+                icon: Icon(
+                  _controller.value.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  size: 28,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -646,16 +703,19 @@ class _SectionWidget extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ],
-        Text(
-          section.body,
-          style: const TextStyle(
-            fontSize: 15,
-            color: Color(0xFF374151),
-            height: 1.6,
+        if (section.body.trim().isNotEmpty) ...[
+          Text(
+            section.body,
+            style: const TextStyle(
+              fontSize: 15,
+              color: Color(0xFF374151),
+              height: 1.6,
+            ),
           ),
-        ),
+        ],
         if (section.keyPoints != null && section.keyPoints!.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          if (section.heading != null || section.body.trim().isNotEmpty)
+            const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -695,6 +755,17 @@ class _SectionWidget extends StatelessWidget {
                   ),
                 ],
               ],
+            ),
+          ),
+        ],
+        if (section.bodyAfter != null && section.bodyAfter!.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            section.bodyAfter!,
+            style: const TextStyle(
+              fontSize: 15,
+              color: Color(0xFF374151),
+              height: 1.6,
             ),
           ),
         ],

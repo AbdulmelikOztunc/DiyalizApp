@@ -100,5 +100,7 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
+  web:
+    generate: true
   remove_alpha_ios: true
-  image_path: "/Users/melik/.cursor/projects/Users-melik-DiyalizApp/assets/logo-a9652e79-7cbb-4698-952c-10efb8e4041f.png"
+  image_path: assets/app_icon.png
