@@ -6,10 +6,19 @@ class AppSettings {
     required this.aboutText,
   });
 
+  /// API dönmeden veya `app_name` boşsa kullanılacak başlık.
+  static const String fallbackDisplayTitle = 'AVF Bakım Rehberi';
+
   final String appName;
   final String contactEmail;
   final int moduleUnlockDays;
   final String aboutText;
+
+  /// Splash / giriş gibi yerlerde gösterilecek uygulama adı.
+  String get displayTitleOrFallback {
+    final t = appName.trim();
+    return t.isNotEmpty ? t : AppSettings.fallbackDisplayTitle;
+  }
 
   /// Beklenen gövde: `{ "success": true, "settings": { ... } }`
   factory AppSettings.fromResponse(Map<String, dynamic> root) {

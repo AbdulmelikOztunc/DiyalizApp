@@ -45,161 +45,46 @@ const kStaticModules = <ModuleItem>[
   ),
 ];
 
+/// Modül 1 ilk sekme başlığı (PDF üstündeki başlıkla uyumlu).
+const kModule1PrimaryPageTitle = 'Böbreklerimizi Tanıyalım';
+
+/// Ekranda gösterilmez; yalnızca sesli okuma. PDF metin katmanı + kutularda yalnızca görsel olan bölümler elle eklenmiştir.
+const kModule1HiddenNarrationForTts = '''
+Böbreklerimiz, belimizin arka kısmında yer alan ve kuru fasulye şeklinde olan iki adet organdır.
+
+Yetişkin bir böbreğin büyüklüğü yaklaşık olarak bir yumruk kadardır. Her bir böbrek yüz yirmi beş ile yüz elli gram ağırlığındadır.
+
+Böbreklerimiz ne işe yarar?
+
+Böbreklerimiz aynı anda birçok görevi yerine getirir. Örneğin, evimizi temizlerken gerekli eşyaları düzenler, gereksiz olanları ayırıp çöpe atarız. Böbreklerde benzer şekilde, besinlerle alınan ve vücudumuz için yararsız, hatta zararlı olabilecek, kanda biriken maddeleri vücuttan uzaklaştırır.
+
+Doktorunuzdan sıkça duyduğunuz üre, kreatinin ve ürik asit: işte bu maddeler kanda biriken zararlı maddelerdendir. Bu maddelerin süzülerek idrarla vücuttan uzaklaştırılmasını sağlayan organlar ise böbreklerdir.
+
+Böbreklerimiz görevini yeterince yapamaz hale geldiğinde, vücutta biriken fazla tuz ve suyu gerektiği gibi uzaklaştıramayız. Suyun vücutta fazla birikmesi bacaklarda ve göz kapaklarında şişlik oluşmasına, kısa sürede aşırı kilo artışına ve tansiyonun, yani kan basıncının yükselmesine yol açar.
+
+Bu durum ilerlediğinde akciğerlerde sıvı birikimi gelişebilir ve buna bağlı olarak nefes darlığı ortaya çıkabilir.
+
+Böbrekler görevini yerine getiremez hale geldiğinde, kemik iliği gerekli uyarıları alamaz ve yeterli miktarda kan üretemez. Bu durumda kansızlık ortaya çıkar.
+
+Bildiğiniz gibi kemiklerimiz vücudumuzu ayakta tutan ve hareketimizi sağlayan temel direklerdir. Böbrekler bu görevini yerine getiremezse vücudumuzda kalsiyum eksikliği ve fosfor fazlalığı başlar. Sonuçta kemikler zayıflar ve kolaylıkla kırılır.
+
+Böbreklerimiz bu görevlerini yapamaz hale gelirse zararlı atık maddeler vücutta birikir ve zehirlenmeler olabilir.
+''';
+
+/// Modül 1: tek içerik sayfası (PDF) + video sekmesi `videoUrl` ile.
 const kModule1Content = ModuleContent(
   moduleId: '1',
   title: 'Böbrek ve Hemodiyaliz',
   videoUrl: 'https://www.youtube.com/watch?v=mI7u1wazvDU',
   contentPages: [
     ContentPage(
-      title: 'Böbreklerin Görevleri',
-      sections: [
-        ContentSection(
-          body:
-              'Böbrekler, karın boşluğunun arka kısmında, omurganın her iki yanında bulunan fasulye şeklinde iki organdır. '
-              'Her bir böbrek yaklaşık 10-12 cm uzunluğunda ve 150 gram ağırlığındadır. '
-              'Küçük olmalarına rağmen vücudumuzun en hayati organlarından biridir.',
-        ),
-        ContentSection(
-          heading: 'Böbreklerin Temel Görevleri',
-          body: 'Böbrekler günde yaklaşık 180 litre kanı süzerek vücudumuzun iç dengesini korur.',
-          keyPoints: [
-            'Kanı süzerek zararlı atık maddeleri ve fazla sıvıyı idrar yoluyla vücuttan uzaklaştırır',
-            'Vücuttaki sıvı, elektrolit (sodyum, potasyum, kalsiyum) ve asit-baz dengesini düzenler',
-            'Kan yapımı için gerekli olan eritropoetin hormonunu üretir',
-            'Kan basıncının düzenlenmesine yardımcı olur (renin hormonu)',
-            'D vitaminini aktif hale getirerek kemik sağlığına katkıda bulunur',
-          ],
-        ),
-      ],
-    ),
-    ContentPage(
-      title: 'Kronik Böbrek Hastalığı',
-      sections: [
-        ContentSection(
-          body:
-              'Kronik böbrek hastalığı (KBH), böbreklerin işlevlerini geri dönüşümsüz olarak kaybetmesi durumudur. '
-              'Bu süreç genellikle yıllar içinde yavaş yavaş ilerler. Böbrekler normalin %10-15\'inin altına '
-              'düştüğünde, yaşamı sürdürmek için diyaliz tedavisi veya böbrek nakli gerekli hale gelir.',
-        ),
-        ContentSection(
-          heading: 'Belirtiler',
-          body: 'Kronik böbrek hastalığının erken evrelerinde belirgin belirti olmayabilir. İleri evrelerde şu belirtiler ortaya çıkabilir:',
-          keyPoints: [
-            'Yorgunluk ve halsizlik',
-            'İştahsızlık, bulantı ve kusma',
-            'Ellerde ve ayaklarda şişlik (ödem)',
-            'Nefes darlığı',
-            'İdrar miktarında azalma',
-            'Uyku problemleri',
-            'Kaşıntı ve cilt kuruluğu',
-          ],
-        ),
-        ContentSection(
-          heading: 'En Sık Nedenler',
-          body: 'Kronik böbrek hastalığının en sık nedenleri:',
-          keyPoints: [
-            'Diyabet (şeker hastalığı) — en sık neden',
-            'Hipertansiyon (yüksek tansiyon)',
-            'Glomerülonefrit (böbrek iltihabı)',
-            'Polikistik böbrek hastalığı',
-          ],
-        ),
-      ],
-    ),
-    ContentPage(
-      title: 'Hemodiyaliz Nedir?',
-      sections: [
-        ContentSection(
-          body:
-              'Hemodiyaliz, böbreklerin yeterince çalışamadığı durumlarda kanın vücut dışında özel bir makine '
-              'aracılığıyla temizlenmesi işlemidir. Bu tedavi, böbreklerin yapamadığı görevleri kısmen üstlenir: '
-              'kanı zararlı maddelerden arındırır, fazla sıvıyı uzaklaştırır ve elektrolit dengesini sağlar.',
-        ),
-        ContentSection(
-          heading: 'Hemodiyaliz Nasıl Çalışır?',
-          body:
-              'Hemodiyaliz sırasında kanınız, damar erişiminiz (fistül, greft veya kateter) aracılığıyla '
-              'vücudunuzdan alınır ve diyaliz makinesindeki özel bir filtreden (diyalizör) geçirilir. '
-              'Bu filtre, yapay bir böbrek gibi çalışarak kandaki üre, kreatinin gibi atık maddeleri ve '
-              'fazla sıvıyı temizler. Temizlenen kan tekrar vücudunuza geri verilir.',
-          keyPoints: [
-            'İşlem genellikle haftada 3 gün, her seans 4 saat sürer',
-            'Tedavi diyaliz merkezinde sağlık ekibi gözetiminde yapılır',
-            'Diyalizör (filtre) içinde binlerce ince tüp bulunur ve kanı süzer',
-            'Diyalizat adı verilen özel bir sıvı, atık maddelerin kandan çekilmesini sağlar',
-          ],
-        ),
-      ],
-    ),
-    ContentPage(
-      title: 'Hemodiyaliz Süreci',
-      sections: [
-        ContentSection(
-          heading: 'Diyaliz Öncesi',
-          body: 'Her diyaliz seansından önce bazı hazırlıklar yapılır:',
-          keyPoints: [
-            'Kilo ölçümü yapılarak son seanstan bu yana alınan sıvı miktarı belirlenir',
-            'Tansiyon, nabız ve ateş ölçülür',
-            'Damar erişiminiz kontrol edilir ve iğneler yerleştirilir',
-            'Makine ayarları sizin ihtiyaçlarınıza göre düzenlenir',
-          ],
-        ),
-        ContentSection(
-          heading: 'Diyaliz Sırasında',
-          body:
-              'Seans boyunca diyaliz hemşiresi sizi yakından takip eder. Bu sürede:',
-          keyPoints: [
-            'Tansiyonunuz düzenli aralıklarla ölçülür',
-            'Kendinizi rahat hissetmeniz için pozisyon ayarlanır',
-            'Kitap okuyabilir, televizyon izleyebilir veya dinlenebilirsiniz',
-            'Herhangi bir rahatsızlık hissederseniz hemen hemşirenize bildirin',
-          ],
-        ),
-        ContentSection(
-          heading: 'Diyaliz Sonrası',
-          body: 'Seans tamamlandıktan sonra:',
-          keyPoints: [
-            'İğneler çıkarılır ve damar erişim yerinize bası uygulanır',
-            'Kilo ölçümü yapılarak çekilen sıvı miktarı kontrol edilir',
-            'Tansiyon ve nabız ölçülür',
-            'Hafif baş dönmesi olabilir, yavaşça ayağa kalkmanız önerilir',
-          ],
-        ),
-      ],
-    ),
-    ContentPage(
-      title: 'Öz Bakım ve Dikkat Edilmesi Gerekenler',
-      sections: [
-        ContentSection(
-          body:
-              'Hemodiyaliz tedavisi süresince kendi sağlığınıza dikkat etmeniz tedavinin başarısı için çok önemlidir. '
-              'Öz bakım becerilerinizi geliştirmek, yaşam kalitenizi artırmanın en etkili yoludur.',
-        ),
-        ContentSection(
-          heading: 'Günlük Öz Bakım Önerileri',
-          body: 'Her gün dikkat etmeniz gereken temel noktalar:',
-          keyPoints: [
-            'Her gün kilonuzu ölçün ve kaydedin — iki diyaliz arası kilo artışı 2 kg\'ı geçmemeli',
-            'Günlük sıvı alımınızı takip edin (doktorunuzun önerdiği miktar kadar)',
-            'Tansiyonunuzu düzenli olarak ölçün',
-            'İlaçlarınızı doktorunuzun önerdiği şekilde ve zamanında kullanın',
-            'Damar erişiminizi (fistül/greft) günlük kontrol edin — titreşim (thrill) hissetmelisiniz',
-            'Dengeli ve diyetinize uygun beslenin',
-          ],
-        ),
-        ContentSection(
-          heading: 'Acil Durumlarda Ne Yapmalı?',
-          body: 'Şu durumlarda hemen sağlık ekibinizle iletişime geçin:',
-          keyPoints: [
-            'Fistül/greft bölgesinde şişlik, kızarıklık veya ağrı',
-            'Fistülde titreşim (thrill) hissedememe',
-            'Ateş yükselmesi (38°C üzeri)',
-            'Nefes darlığı veya göğüs ağrısı',
-            'Aşırı ödem (şişlik) veya ani kilo artışı',
-            'Kontrol edilemeyen kanama',
-          ],
-        ),
-      ],
+      title: kModule1PrimaryPageTitle,
+      contentId: 'module1_pdf',
+      mediaUrl: 'assets/education/module1_bolum1.pdf',
+      mediaType: 'pdf',
+      mediaPosition: 'above',
+      narrationText: kModule1HiddenNarrationForTts,
+      sections: [],
     ),
   ],
 );

@@ -1,11 +1,21 @@
+import 'package:diyalizmobile/core/settings/app_settings.dart';
+import 'package:diyalizmobile/core/settings/app_settings_provider.dart';
 import 'package:diyalizmobile/features/auth/presentation/widgets/glass_auth_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SplashPage extends StatelessWidget {
+class SplashPage extends ConsumerWidget {
   const SplashPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(appSettingsProvider);
+    final title = settingsAsync.when(
+      data: (s) => s.displayTitleOrFallback,
+      loading: () => AppSettings.fallbackDisplayTitle,
+      error: (_, _) => AppSettings.fallbackDisplayTitle,
+    );
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: authGradient),
@@ -31,10 +41,10 @@ class SplashPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Hemodiyaliz\nEğitim Platformu',
+              Text(
+                title,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 26,
                   fontWeight: FontWeight.w700,

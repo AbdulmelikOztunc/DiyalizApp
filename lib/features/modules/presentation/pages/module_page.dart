@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
+import 'package:diyalizmobile/features/modules/utils/pdf_asset_narration_text.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, kDebugMode, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -15,6 +18,25 @@ const _darkPurple = Color(0xFF5B21B6);
 const _deepPurple = Color(0xFF8B5CF6);
 const _lightPurple = Color(0xFFF3F0FF);
 const _mediumPurple = Color(0xFFE0D7FF);
+
+bool _pageUsesEmbeddedPdfAsset(ContentPage page) {
+  final raw = page.mediaUrl?.trim() ?? '';
+  if (raw.isEmpty) return false;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return false;
+  final type = page.mediaType?.toLowerCase();
+  if (type == 'pdf') return true;
+  return raw.toLowerCase().endsWith('.pdf');
+}
+
+bool _pageHasHiddenNarration(ContentPage page) {
+  final t = page.narrationText?.trim();
+  return t != null && t.isNotEmpty;
+}
+
+bool _videoUrlLooksYoutube(String raw) {
+  final u = raw.trim().toLowerCase();
+  return u.contains('youtube.com') || u.contains('youtu.be');
+}
 
 class ModulePage extends ConsumerStatefulWidget {
   const ModulePage({required this.moduleId, super.key});
@@ -32,6 +54,27 @@ class _ModulePageState extends ConsumerState<ModulePage> {
   int _currentPage = 0;
   bool _isSpeaking = false;
   String? _speakingContentId;
+
+  /// Yerel PDF açıkken alt çubuk bu denetleyiciyle sayfa ilerletir (PdfView kaydırması kapalı).
+  PdfController? _bridgedPdfController;
+
+  void _onBridgedPdfPageChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _setBridgedPdf(PdfController controller) {
+    if (_bridgedPdfController == controller) return;
+    _bridgedPdfController?.pageListenable.removeListener(_onBridgedPdfPageChanged);
+    _bridgedPdfController = controller;
+    controller.pageListenable.addListener(_onBridgedPdfPageChanged);
+    if (mounted) setState(() {});
+  }
+
+  void _clearBridgedPdf() {
+    _bridgedPdfController?.pageListenable.removeListener(_onBridgedPdfPageChanged);
+    _bridgedPdfController = null;
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
@@ -68,6 +111,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
 
   @override
   void dispose() {
+    _clearBridgedPdf();
     unawaited(_tts.stop());
     _pageController.dispose();
     super.dispose();
@@ -116,8 +160,40 @@ class _ModulePageState extends ConsumerState<ModulePage> {
     });
   }
 
-  String _buildNarrationText(ContentPage page) {
+  static String _truncateForTts(String text, {int maxChars = 18000}) {
+    if (text.length <= maxChars) return text;
+    return '${text.substring(0, maxChars)}. Metin çok uzun; sesli okuma burada kesildi.';
+  }
+
+  Future<({String text, bool pdfTextLayerMissing})> _composeNarrationForPage(
+    ContentPage page,
+  ) async {
+    final hidden = page.narrationText?.trim();
+    if (hidden != null && hidden.isNotEmpty) {
+      final buffer = StringBuffer(page.title)
+        ..write('. ')
+        ..write(hidden);
+      final merged = buffer.toString().trim();
+      final clipped = _truncateForTts(merged);
+      final text = _normalizeShoutingCapsForTts(clipped);
+      return (text: text, pdfTextLayerMissing: false);
+    }
+
     final buffer = StringBuffer(page.title);
+    var pdfTextLayerMissing = false;
+
+    if (_pageUsesEmbeddedPdfAsset(page)) {
+      final pdfPlain =
+          await loadPdfAssetNarrationText(page.mediaUrl!.trim());
+      if (pdfPlain.isNotEmpty) {
+        buffer
+          ..write('. ')
+          ..write(pdfPlain);
+      } else {
+        pdfTextLayerMissing = true;
+      }
+    }
+
     for (final section in page.sections) {
       final heading = section.heading;
       if (heading != null && heading.isNotEmpty) {
@@ -148,7 +224,14 @@ class _ModulePageState extends ConsumerState<ModulePage> {
           ..write(after);
       }
     }
-    return _normalizeShoutingCapsForTts(buffer.toString());
+
+    final merged = buffer.toString().trim();
+    if (merged.isEmpty) {
+      return (text: '', pdfTextLayerMissing: pdfTextLayerMissing);
+    }
+    final clipped = _truncateForTts(merged);
+    final text = _normalizeShoutingCapsForTts(clipped);
+    return (text: text, pdfTextLayerMissing: pdfTextLayerMissing);
   }
 
   Future<void> _togglePageNarration(ContentPage page) async {
@@ -158,15 +241,41 @@ class _ModulePageState extends ConsumerState<ModulePage> {
       return;
     }
 
-    final text = _buildNarrationText(page);
-    if (text.isEmpty) return;
+    final result = await _composeNarrationForPage(page);
+    if (result.text.isEmpty) return;
+
+    if (result.pdfTextLayerMissing &&
+        mounted &&
+        !_pageHasHiddenNarration(page)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'PDF içinde seçilebilir metin yok (sayfalar taranmış görüntü olabilir). '
+            'Sesli okuma yalnızca alttaki özet metinden devam eder.',
+            style: TextStyle(fontSize: 14),
+          ),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: _darkPurple.withValues(alpha: 0.95),
+        ),
+      );
+    }
+
+    if (kDebugMode &&
+        _pageUsesEmbeddedPdfAsset(page) &&
+        !_pageHasHiddenNarration(page)) {
+      debugPrint(
+        '[TTS] PDF katmanı: ${result.pdfTextLayerMissing ? "yok veya boş" : "metin çıkarıldı"}; '
+        'konuşma metni ${result.text.length} karakter',
+      );
+    }
 
     await _tts.stop();
     setState(() => _speakingContentId = page.contentId);
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       await _tts.setSharedInstance(true);
     }
-    await _tts.speak(text, focus: true);
+    await _tts.speak(result.text, focus: true);
   }
 
   void _goToPage(int page) {
@@ -260,6 +369,8 @@ class _ModulePageState extends ConsumerState<ModulePage> {
         ),
         Expanded(
           child: PageView.builder(
+            clipBehavior: Clip.none,
+            physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
             controller: _pageController,
             itemCount: totalPages,
             onPageChanged: (page) {
@@ -279,34 +390,127 @@ class _ModulePageState extends ConsumerState<ModulePage> {
                 isReading:
                     _isSpeaking && _speakingContentId == contentPage.contentId,
                 onToggleRead: () => _togglePageNarration(contentPage),
+                onPdfBridgeAttach: _setBridgedPdf,
+                onPdfBridgeDetach: _clearBridgedPdf,
               );
             },
           ),
         ),
-        _BottomNavigation(
-          currentPage: _currentPage,
-          totalPages: totalPages,
-          onPrevious: _currentPage > 0
-              ? () => _goToPage(_currentPage - 1)
-              : null,
-          onNext: _currentPage < totalPages - 1
-              ? () => _goToPage(_currentPage + 1)
-              : null,
-          onComplete: () async {
-            final lastContentPageIndex = content.contentPages.length - 1;
-            if (lastContentPageIndex >= 0) {
-              await _sendProgress(
-                pageIndex: lastContentPageIndex,
-                content: content,
-              );
-            }
-            ref.invalidate(modulesControllerProvider);
-            if (context.mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+        _buildBottomNavigation(context, content, hasVideo, totalPages),
       ],
+    );
+  }
+
+  Widget _buildBottomNavigation(
+    BuildContext context,
+    ModuleContent content,
+    bool hasVideo,
+    int totalPages,
+  ) {
+    final isVideoPage = hasVideo && _currentPage == totalPages - 1;
+    final onContentPage =
+        !isVideoPage && _currentPage < content.contentPages.length;
+    final currentContentPage =
+        onContentPage ? content.contentPages[_currentPage] : null;
+    final isEmbeddedPdf = currentContentPage != null &&
+        _pageUsesEmbeddedPdfAsset(currentContentPage);
+
+    VoidCallback? onPrevious;
+    VoidCallback? onNext;
+    var nextEnabled = true;
+    var previousEnabled = true;
+    String? centerLabel;
+    var previousLabel = 'Önceki';
+    var nextLabel = 'Sonraki';
+
+    if (isVideoPage) {
+      onPrevious =
+          _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null;
+      onNext = null;
+    } else if (isEmbeddedPdf) {
+      final ctrl = _bridgedPdfController;
+      final loaded = ctrl != null &&
+          ctrl.loadingState.value == PdfLoadingState.success &&
+          (ctrl.pagesCount ?? 0) >= 1;
+      final totalPdf = loaded ? (ctrl.pagesCount ?? 0) : 0;
+      final currentPdf = loaded ? ctrl.page : 1;
+
+      if (!loaded) {
+        onPrevious =
+            _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null;
+        previousEnabled = onPrevious != null;
+        onNext = () {};
+        nextEnabled = false;
+        centerLabel = 'PDF yükleniyor…';
+      } else {
+        if (totalPdf > 1) {
+          centerLabel = 'Sayfa $currentPdf / $totalPdf';
+        }
+
+        if (currentPdf > 1) {
+          final c = ctrl;
+          onPrevious = () {
+            c.previousPage(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+            );
+          };
+          previousLabel = 'Önceki sayfa';
+        } else if (_currentPage > 0) {
+          onPrevious = () => _goToPage(_currentPage - 1);
+        } else {
+          onPrevious = null;
+        }
+
+        final hasOuterNext = _currentPage < totalPages - 1;
+        if (currentPdf < totalPdf) {
+          final c = ctrl;
+          onNext = () {
+            c.nextPage(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+            );
+          };
+          nextLabel = 'Sonraki sayfa';
+        } else if (hasOuterNext) {
+          onNext = () => _goToPage(_currentPage + 1);
+          final nextIsVideo = hasVideo && _currentPage + 1 == totalPages - 1;
+          nextLabel = nextIsVideo ? 'Videoya geç' : 'Sonraki';
+        } else {
+          onNext = null;
+        }
+      }
+    } else {
+      onPrevious =
+          _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null;
+      onNext = _currentPage < totalPages - 1
+          ? () => _goToPage(_currentPage + 1)
+          : null;
+    }
+
+    return _BottomNavigation(
+      currentPage: _currentPage,
+      totalPages: totalPages,
+      centerLabel: centerLabel,
+      previousLabel: previousLabel,
+      nextLabel: nextLabel,
+      previousEnabled: previousEnabled,
+      nextEnabled: nextEnabled,
+      onPrevious: onPrevious,
+      onNext: onNext,
+      onComplete: () async {
+        final lastContentPageIndex = content.contentPages.length - 1;
+        if (lastContentPageIndex >= 0) {
+          await _sendProgress(
+            pageIndex: lastContentPageIndex,
+            content: content,
+          );
+        }
+        ref.invalidate(modulesControllerProvider);
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
     );
   }
 }
@@ -417,6 +621,8 @@ class _ContentPageView extends StatelessWidget {
     required this.page,
     required this.isReading,
     required this.onToggleRead,
+    this.onPdfBridgeAttach,
+    this.onPdfBridgeDetach,
   });
 
   static const double _horizontalInset = 20;
@@ -424,6 +630,8 @@ class _ContentPageView extends StatelessWidget {
   final ContentPage page;
   final bool isReading;
   final VoidCallback onToggleRead;
+  final void Function(PdfController controller)? onPdfBridgeAttach;
+  final VoidCallback? onPdfBridgeDetach;
 
   bool get _isVideoContent {
     final type = page.mediaType?.toLowerCase();
@@ -443,15 +651,38 @@ class _ContentPageView extends StatelessWidget {
   bool get _hasMedia =>
       page.mediaUrl != null && page.mediaUrl!.trim().isNotEmpty;
 
-  /// Medya, `SingleChildScrollView` yatay padding’i ile aynı genişlikte kalmalı;
-  /// ekran genişliğinde widget kullanmak `UnconstrainedBox` / tam genişlik hilesiyle
-  /// RenderConstraintsTransformBox taşma hatasına yol açıyor.
-  Widget _mediaBlock(BuildContext context, {required double width}) {
+  /// PDF tam ekran genişliğinde; video/görsel layout genişliğinde (yatay inset ile).
+  ///
+  /// [pdfHeight]: Yerel PDF için sabit görünüm alanı yüksekliği (Expanded ile verilir).
+  /// Verilmezse kaydırılabilir sayfa düzeninde kullanılan varsayılan yükseklik kullanılır.
+  Widget _mediaBlock(
+    BuildContext context, {
+    required double width,
+    double? pdfHeight,
+  }) {
     final url = page.mediaUrl!;
     if (_isVideoContent) {
       return SizedBox(
         width: width,
         child: _InlineNetworkVideo(mediaUrl: url),
+      );
+    }
+    if (_pageUsesEmbeddedPdfAsset(page)) {
+      final screenH = MediaQuery.sizeOf(context).height;
+      final h = pdfHeight ?? math.min(620.0, screenH * 0.62);
+      return SizedBox(
+        width: width,
+        height: h,
+        child: _InlinePdfAsset(
+          assetPath: url.trim(),
+          width: width,
+          height: h,
+          useExternalPageNavigation: onPdfBridgeAttach != null,
+          onBridgeAttach: onPdfBridgeAttach,
+          onBridgeDetach: onPdfBridgeDetach,
+          onNarrationTap: onToggleRead,
+          isNarrating: isReading,
+        ),
       );
     }
     return SizedBox(
@@ -491,15 +722,18 @@ class _ContentPageView extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        _horizontalInset,
-        20,
-        _horizontalInset,
-        24,
+  Widget _mediaSlot(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _horizontalInset),
+      child: LayoutBuilder(
+        builder: (ctx, c) => _mediaBlock(ctx, width: c.maxWidth),
       ),
+    );
+  }
+
+  Widget _pageHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _horizontalInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -537,7 +771,10 @@ class _ContentPageView extends StatelessWidget {
             isReading
                 ? 'Sesli okunuyor...'
                 : 'İçeriği sesli dinlemek için butona basın',
-            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF6B7280),
+            ),
           ),
           const SizedBox(height: 6),
           Container(
@@ -548,26 +785,436 @@ class _ContentPageView extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionsScrollColumn({required int flex}) {
+    return Expanded(
+      flex: flex,
+      child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        clipBehavior: Clip.none,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _horizontalInset),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final section in page.sections) ...[
+                _SectionWidget(section: section),
+                const SizedBox(height: 20),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _embeddedPdfExpandedSlot(BuildContext context, {required int flex}) {
+    final screenW = MediaQuery.sizeOf(context).width;
+    return Expanded(
+      flex: flex,
+      child: LayoutBuilder(
+        builder: (ctx, c) {
+          final h = c.maxHeight;
+          if (!h.isFinite || h <= 0) {
+            return const SizedBox.shrink();
+          }
+          return _mediaBlock(ctx, width: screenW, pdfHeight: h);
+        },
+      ),
+    );
+  }
+
+  /// PdfView dikey sayfa sayfa; dış kaydırıcı ile jest çakışması olmaması için PDF Expanded alanında.
+  Widget _buildEmbeddedPdfLayout(BuildContext context) {
+    final hasSections = page.sections.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_hasMedia && _mediaAbove) ...[
+            _embeddedPdfExpandedSlot(context, flex: hasSections ? 3 : 1),
+            if (hasSections) ...[
+              const SizedBox(height: 20),
+              _sectionsScrollColumn(flex: 2),
+            ],
+          ] else ...[
+            if (hasSections) _sectionsScrollColumn(flex: 2),
+            if (_hasMedia && !_mediaAbove) ...[
+              if (hasSections) const SizedBox(height: 20),
+              _embeddedPdfExpandedSlot(context, flex: hasSections ? 3 : 1),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_pageUsesEmbeddedPdfAsset(page)) {
+      return _buildEmbeddedPdfLayout(context);
+    }
+
+    return SingleChildScrollView(
+      clipBehavior: Clip.none,
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.only(top: 20, bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _pageHeader(context),
           if (_hasMedia && _mediaAbove) ...[
             const SizedBox(height: 20),
-            LayoutBuilder(
-              builder: (context, constraints) =>
-                  _mediaBlock(context, width: constraints.maxWidth),
+            _mediaSlot(context),
+            const SizedBox(height: 20),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _horizontalInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final section in page.sections) ...[
+                  _SectionWidget(section: section),
+                  const SizedBox(height: 20),
+                ],
+              ],
             ),
-            const SizedBox(height: 20),
-          ],
-          for (final section in page.sections) ...[
-            _SectionWidget(section: section),
-            const SizedBox(height: 20),
-          ],
+          ),
           if (_hasMedia && !_mediaAbove) ...[
-            LayoutBuilder(
-              builder: (context, constraints) =>
-                  _mediaBlock(context, width: constraints.maxWidth),
-            ),
+            _mediaSlot(context),
             const SizedBox(height: 8),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _InlinePdfAsset extends StatefulWidget {
+  const _InlinePdfAsset({
+    required this.assetPath,
+    required this.width,
+    required this.height,
+    required this.onNarrationTap,
+    required this.isNarrating,
+    this.useExternalPageNavigation = false,
+    this.onBridgeAttach,
+    this.onBridgeDetach,
+  });
+
+  final String assetPath;
+  final double width;
+  final double height;
+  final VoidCallback onNarrationTap;
+  final bool isNarrating;
+  final bool useExternalPageNavigation;
+  final void Function(PdfController controller)? onBridgeAttach;
+  final VoidCallback? onBridgeDetach;
+
+  @override
+  State<_InlinePdfAsset> createState() => _InlinePdfAssetState();
+}
+
+class _InlinePdfAssetState extends State<_InlinePdfAsset> {
+  late final PdfController _controller;
+  bool _didAttachToBridge = false;
+  List<PhotoViewController>? _photoControllers;
+
+  void _disposePhotoControllers() {
+    if (_photoControllers == null) return;
+    for (final c in _photoControllers!) {
+      c.dispose();
+    }
+    _photoControllers = null;
+  }
+
+  void _syncPhotoControllersForDocument() {
+    final state = _controller.loadingState.value;
+    if (state == PdfLoadingState.loading) {
+      _disposePhotoControllers();
+      return;
+    }
+    if (state != PdfLoadingState.success) return;
+    final n = _controller.pagesCount ?? 0;
+    if (n < 1) {
+      _disposePhotoControllers();
+      return;
+    }
+    if (_photoControllers != null && _photoControllers!.length == n) return;
+    _disposePhotoControllers();
+    _photoControllers = List.generate(n, (_) => PhotoViewController());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PdfController(
+      document: PdfDocument.openAsset(widget.assetPath),
+    );
+    _controller.loadingState.addListener(_onPdfControllerLoadingChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryNotifyPdfBridge());
+  }
+
+  void _onPdfControllerLoadingChanged() {
+    _syncPhotoControllersForDocument();
+    if (mounted) setState(() {});
+    _tryNotifyPdfBridge();
+  }
+
+  void _tryNotifyPdfBridge() {
+    if (!widget.useExternalPageNavigation) return;
+    if (_didAttachToBridge) return;
+    if (_controller.loadingState.value != PdfLoadingState.success) return;
+    final n = _controller.pagesCount;
+    if (n == null || n < 1) return;
+    _didAttachToBridge = true;
+    widget.onBridgeAttach?.call(_controller);
+  }
+
+  @override
+  void dispose() {
+    if (_didAttachToBridge) {
+      widget.onBridgeDetach?.call();
+    }
+    _controller.loadingState.removeListener(_onPdfControllerLoadingChanged);
+    _disposePhotoControllers();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  PhotoViewGalleryPageOptions _buildPdfPageGalleryOption(
+    BuildContext context,
+    Future<PdfPageImage> pageImage,
+    int index,
+    PdfDocument document,
+  ) {
+    final ctrls = _photoControllers;
+    if (ctrls == null || index < 0 || index >= ctrls.length) {
+      return PhotoViewGalleryPageOptions(
+        imageProvider: PdfPageImageProvider(
+          pageImage,
+          index,
+          document.id,
+        ),
+        minScale: PhotoViewComputedScale.contained * 1.0,
+        maxScale: PhotoViewComputedScale.contained * 5.0,
+        initialScale: PhotoViewComputedScale.covered * 1.0,
+        heroAttributes: PhotoViewHeroAttributes(tag: '${document.id}-$index'),
+      );
+    }
+    return PhotoViewGalleryPageOptions(
+      imageProvider: PdfPageImageProvider(
+        pageImage,
+        index,
+        document.id,
+      ),
+      controller: ctrls[index],
+      minScale: PhotoViewComputedScale.contained * 1.0,
+      maxScale: PhotoViewComputedScale.contained * 5.0,
+      initialScale: PhotoViewComputedScale.covered * 1.0,
+      heroAttributes: PhotoViewHeroAttributes(tag: '${document.id}-$index'),
+    );
+  }
+
+  void _zoomInCurrentPdfPage() {
+    if (_controller.loadingState.value != PdfLoadingState.success) return;
+    final ctrls = _photoControllers;
+    final n = _controller.pagesCount ?? 0;
+    if (ctrls == null || n < 1) return;
+    final idx = _controller.page - 1;
+    if (idx < 0 || idx >= ctrls.length) return;
+    final pc = ctrls[idx];
+    final cur = pc.scale;
+    final next = (cur ?? 1.05) * 1.22;
+    pc.scale = next.clamp(0.85, 6.0);
+  }
+
+  Future<void> _resetZoomForCurrentPage() async {
+    if (_controller.loadingState.value != PdfLoadingState.success) return;
+    final ctrls = _photoControllers;
+    final n = _controller.pagesCount ?? 0;
+    if (ctrls == null || n < 1) return;
+    final idx = _controller.page - 1;
+    if (idx >= 0 && idx < ctrls.length) {
+      ctrls[idx].reset();
+    }
+    final p = _controller.page.clamp(1, n);
+    await _controller.animateToPage(
+      p,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final extNav = widget.useExternalPageNavigation;
+    return ColoredBox(
+      color: Colors.white,
+      child: SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: PdfView(
+                controller: _controller,
+                scrollDirection: Axis.vertical,
+                pageSnapping: true,
+                physics: extNav
+                    ? const NeverScrollableScrollPhysics()
+                    : const PageScrollPhysics(
+                        parent: ClampingScrollPhysics(),
+                      ),
+                backgroundDecoration: const BoxDecoration(color: Colors.white),
+                builders: PdfViewBuilders<DefaultBuilderOptions>(
+                  options: const DefaultBuilderOptions(),
+                  pageBuilder: _buildPdfPageGalleryOption,
+                  documentLoaderBuilder: (_) => const Center(
+                    child: CircularProgressIndicator(color: _primaryPurple),
+                  ),
+                  pageLoaderBuilder: (_) => const Center(
+                    child: CircularProgressIndicator(color: _primaryPurple),
+                  ),
+                  errorBuilder: (_, error) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'PDF açılamadı',
+                      style: TextStyle(
+                        color: _darkPurple.withValues(alpha: 0.9),
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.88),
+                elevation: 0,
+                shape: CircleBorder(
+                  side: BorderSide(color: Colors.grey.shade300),
+                ),
+                child: IconButton(
+                  onPressed: widget.onNarrationTap,
+                  tooltip: widget.isNarrating
+                      ? 'Sesli okumayı durdur'
+                      : 'Sesli oku',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    widget.isNarrating
+                        ? Icons.stop_rounded
+                        : Icons.volume_up_rounded,
+                    size: 22,
+                  ),
+                  color: _darkPurple,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.88),
+                elevation: 0,
+                shape: CircleBorder(
+                  side: BorderSide(color: Colors.grey.shade300),
+                ),
+                child: IconButton(
+                  tooltip: 'Yakınlaştır · uzun bas: sıfırla',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.search_rounded, size: 22),
+                  color: _darkPurple,
+                  onPressed: _zoomInCurrentPdfPage,
+                  onLongPress: () => unawaited(_resetZoomForCurrentPage()),
+                ),
+              ),
+            ),
+            if (!extNav)
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _controller.pageListenable,
+                  builder: (context, currentPage, _) {
+                    final total = _controller.pagesCount ?? 0;
+                    if (total < 2) return const SizedBox.shrink();
+                    return Center(
+                      child: Material(
+                        elevation: 2,
+                        borderRadius: BorderRadius.circular(24),
+                        color: Colors.white.withValues(alpha: 0.94),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Önceki sayfa',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: currentPage > 1
+                                    ? () => _controller.previousPage(
+                                          duration: const Duration(
+                                            milliseconds: 220,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                        )
+                                    : null,
+                                icon:
+                                    const Icon(Icons.keyboard_arrow_up_rounded),
+                                color: _darkPurple,
+                              ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  '$currentPage / $total',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: _darkPurple,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Sonraki sayfa',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: currentPage < total
+                                    ? () => _controller.nextPage(
+                                          duration: const Duration(
+                                            milliseconds: 220,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                        )
+                                    : null,
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                ),
+                                color: _darkPurple,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -784,124 +1431,280 @@ class _VideoPageView extends StatefulWidget {
 }
 
 class _VideoPageViewState extends State<_VideoPageView> {
-  late final YoutubePlayerController _ytController;
+  YoutubePlayerController? _ytController;
+  VideoPlayerController? _networkVideoController;
+  Future<void>? _networkVideoInitFuture;
+  bool _networkVideoError = false;
+
+  static const double _playerAspect = 16 / 9;
 
   @override
   void initState() {
     super.initState();
-    final videoId =
-        YoutubePlayerController.convertUrlToId(widget.videoUrl) ?? '';
-    _ytController = YoutubePlayerController.fromVideoId(
-      videoId: videoId,
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showFullscreenButton: true,
-        showControls: true,
-        mute: false,
+    final url = widget.videoUrl.trim();
+    if (url.isEmpty) return;
+
+    if (_videoUrlLooksYoutube(url)) {
+      final videoId =
+          YoutubePlayerController.convertUrlToId(url) ?? '';
+      if (videoId.isEmpty) return;
+      _ytController = YoutubePlayerController.fromVideoId(
+        videoId: videoId,
+        autoPlay: false,
+        params: const YoutubePlayerParams(
+          showFullscreenButton: true,
+          showControls: true,
+          mute: false,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final uri = Uri.parse(url);
+      _networkVideoController = VideoPlayerController.networkUrl(uri);
+      _networkVideoInitFuture =
+          _networkVideoController!.initialize().catchError((_) {
+        if (!mounted) return;
+        setState(() => _networkVideoError = true);
+      });
+    } catch (_) {
+      _networkVideoError = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ytController?.close();
+    _networkVideoController?.dispose();
+    super.dispose();
+  }
+
+  Widget _videoPlaceholder(double height, String message) {
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: ColoredBox(
+        color: _lightPurple,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              '$message\n${widget.videoUrl}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayer(double playerHeight) {
+    final url = widget.videoUrl.trim();
+    if (url.isEmpty) {
+      return _videoPlaceholder(playerHeight, 'Video adresi eksik.');
+    }
+
+    if (_videoUrlLooksYoutube(url)) {
+      final videoId =
+          YoutubePlayerController.convertUrlToId(url) ?? '';
+      if (videoId.isEmpty || _ytController == null) {
+        return _videoPlaceholder(
+          playerHeight,
+          'YouTube bağlantısı çözülemedi.',
+        );
+      }
+      return SizedBox(
+        width: double.infinity,
+        height: playerHeight,
+        child: YoutubePlayer(
+          key: ValueKey(videoId),
+          controller: _ytController!,
+          aspectRatio: _playerAspect,
+        ),
+      );
+    }
+
+    final ctrl = _networkVideoController;
+    if (ctrl == null || _networkVideoError) {
+      return _videoPlaceholder(playerHeight, 'Video yüklenemedi.');
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      height: playerHeight,
+      child: ColoredBox(
+        color: Colors.black,
+        child: FutureBuilder<void>(
+          future: _networkVideoInitFuture,
+          builder: (context, snapshot) {
+            if (_networkVideoError || snapshot.hasError) {
+              return const Center(
+                child: Text(
+                  'Video yüklenemedi',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              );
+            }
+            if (snapshot.connectionState != ConnectionState.done ||
+                !ctrl.value.isInitialized) {
+              return const Center(
+                child: CircularProgressIndicator(color: _primaryPurple),
+              );
+            }
+
+            return Stack(
+              alignment: Alignment.center,
+              fit: StackFit.expand,
+              children: [
+                Center(
+                  child: AspectRatio(
+                    aspectRatio: ctrl.value.aspectRatio == 0
+                        ? _playerAspect
+                        : ctrl.value.aspectRatio,
+                    child: VideoPlayer(ctrl),
+                  ),
+                ),
+                IconButton.filled(
+                  onPressed: () {
+                    if (!ctrl.value.isInitialized) return;
+                    setState(() {
+                      if (ctrl.value.isPlaying) {
+                        ctrl.pause();
+                      } else {
+                        ctrl.play();
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    ctrl.value.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    size: 28,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
   @override
-  void dispose() {
-    _ytController.close();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Eğitim Videosu',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            width: 40,
-            height: 3,
-            decoration: BoxDecoration(
-              color: _primaryPurple,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Modülü tamamlamadan önce aşağıdaki eğitim videosunu izleyin.',
-            style: TextStyle(
-              fontSize: 15,
-              color: Color(0xFF374151),
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 20),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              decoration: BoxDecoration(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bodyWidth = constraints.maxWidth - 40;
+        final playerHeight =
+            bodyWidth > 0 ? bodyWidth / _playerAspect : 200.0;
+
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Eğitim Videosu',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: 40,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: _primaryPurple,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Modülü tamamlamadan önce aşağıdaki eğitim videosunu izleyin.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Color(0xFF374151),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: _primaryPurple.withValues(alpha: 0.15),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: YoutubePlayer(
-                controller: _ytController,
-                aspectRatio: 16 / 9,
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _lightPurple,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
+                child: Container(
+                  width: double.infinity,
                   decoration: BoxDecoration(
-                    color: _mediumPurple,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _primaryPurple.withValues(alpha: 0.15),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.info_outline_rounded,
-                    color: _primaryPurple,
-                    size: 20,
-                  ),
+                  child: _buildPlayer(playerHeight),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Videoyu izledikten sonra "Tamamla" butonuna basarak modülü bitirebilirsiniz.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF374151),
-                      height: 1.4,
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _lightPurple,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _mediumPurple.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _mediumPurple,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.info_outline_rounded,
+                        color: _primaryPurple,
+                        size: 20,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Videoyu izledikten sonra "Tamamla" butonuna basarak modülü bitirebilirsiniz.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF374151),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -910,6 +1713,11 @@ class _BottomNavigation extends StatelessWidget {
   const _BottomNavigation({
     required this.currentPage,
     required this.totalPages,
+    this.centerLabel,
+    this.previousLabel = 'Önceki',
+    this.nextLabel = 'Sonraki',
+    this.previousEnabled = true,
+    this.nextEnabled = true,
     this.onPrevious,
     this.onNext,
     this.onComplete,
@@ -917,6 +1725,11 @@ class _BottomNavigation extends StatelessWidget {
 
   final int currentPage;
   final int totalPages;
+  final String? centerLabel;
+  final String previousLabel;
+  final String nextLabel;
+  final bool previousEnabled;
+  final bool nextEnabled;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final Future<void> Function()? onComplete;
@@ -924,6 +1737,8 @@ class _BottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final centerText =
+        centerLabel ?? '${currentPage + 1} / $totalPages';
 
     return Container(
       padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPadding + 12),
@@ -942,9 +1757,10 @@ class _BottomNavigation extends StatelessWidget {
           if (onPrevious != null)
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: onPrevious,
+                onPressed:
+                    previousEnabled ? onPrevious : null,
                 icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                label: const Text('Önceki'),
+                label: Text(previousLabel),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _primaryPurple,
                   side: const BorderSide(color: _mediumPurple),
@@ -960,20 +1776,21 @@ class _BottomNavigation extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '${currentPage + 1} / $totalPages',
+              centerText,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: _darkPurple,
               ),
+              textAlign: TextAlign.center,
             ),
           ),
           if (onNext != null)
             Expanded(
               child: FilledButton.icon(
-                onPressed: onNext,
-                icon: const Text('Sonraki'),
-                label: const Icon(Icons.arrow_forward_rounded, size: 18),
+                onPressed: nextEnabled ? onNext : null,
+                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                label: Text(nextLabel),
                 style: FilledButton.styleFrom(
                   backgroundColor: _primaryPurple,
                   padding: const EdgeInsets.symmetric(vertical: 12),

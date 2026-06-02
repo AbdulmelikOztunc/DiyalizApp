@@ -1,3 +1,5 @@
+import 'package:diyalizmobile/core/settings/app_settings.dart';
+import 'package:diyalizmobile/core/settings/app_settings_provider.dart';
 import 'package:diyalizmobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:diyalizmobile/features/auth/presentation/utils/tr_national_phone_input_formatter.dart';
 import 'package:diyalizmobile/features/auth/presentation/widgets/glass_auth_widgets.dart';
@@ -29,6 +31,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final settingsAsync = ref.watch(appSettingsProvider);
+    final appTitle = settingsAsync.when(
+      data: (s) => s.displayTitleOrFallback,
+      loading: () => AppSettings.fallbackDisplayTitle,
+      error: (_, _) => AppSettings.fallbackDisplayTitle,
+    );
     final authState = ref.watch(authControllerProvider);
     ref.listen(authControllerProvider, (_, next) {
       if (next.isAuthenticated) {
@@ -86,10 +94,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              const Text(
-                                'Hemodiyaliz\nEğitim Platformu',
+                              Text(
+                                appTitle,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 28,
                                   fontWeight: FontWeight.w700,

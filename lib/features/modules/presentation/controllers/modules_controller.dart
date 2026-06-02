@@ -9,6 +9,44 @@ import 'package:diyalizmobile/features/modules/domain/repositories/modules_repos
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+String? _pickNonEmptyUrl(String? raw) {
+  final t = raw?.trim();
+  if (t == null || t.isEmpty) return null;
+  return t;
+}
+
+/// Önce modül kökü `videoUrl`, yoksa API’nin son içerik kaydı (birinci modülde video genelde burada).
+String? _videoUrlFromApiModule(ModuleContent remote) {
+  final top = _pickNonEmptyUrl(remote.videoUrl);
+  if (top != null) return top;
+
+  final pages = remote.contentPages;
+  if (pages.isEmpty) return null;
+
+  final lastUrl = _pickNonEmptyUrl(pages.last.mediaUrl);
+  if (lastUrl != null) return lastUrl;
+
+  // Son kayıtta medya yoksa geriye doğru ilk dolu medya URL’si (yedek).
+  for (var i = pages.length - 2; i >= 0; i--) {
+    final url = _pickNonEmptyUrl(pages[i].mediaUrl);
+    if (url != null) return url;
+  }
+  return null;
+}
+
+ModuleContent _module1MergedWithApi(ModuleContent remote) {
+  final title =
+      remote.title.trim().isNotEmpty ? remote.title : kModule1Content.title;
+  final videoUrl =
+      _videoUrlFromApiModule(remote) ?? _pickNonEmptyUrl(kModule1Content.videoUrl);
+  return ModuleContent(
+    moduleId: '1',
+    title: title,
+    videoUrl: videoUrl,
+    contentPages: kModule1Content.contentPages,
+  );
+}
+
 final modulesRepositoryProvider = Provider<ModulesRepository>((ref) {
   return ModulesRepositoryImpl(
     ModulesRemoteDataSource(ref.watch(apiClientProvider)),
@@ -69,9 +107,20 @@ final moduleContentProvider = FutureProvider.family<ModuleContent?, String>((
   ref,
   moduleId,
 ) async {
+  if (moduleId == '1') {
+    final result = await ref
+        .read(modulesRepositoryProvider)
+        .getModuleContent(moduleId);
+    return switch (result) {
+      ApiSuccess<ModuleContent>(:final data) => _module1MergedWithApi(data),
+      ApiFailure<ModuleContent>() => kModule1Content,
+    };
+  }
+
   final result = await ref
       .read(modulesRepositoryProvider)
       .getModuleContent(moduleId);
+
   return switch (result) {
     ApiSuccess<ModuleContent>(:final data) when data.contentPages.isNotEmpty =>
       data,

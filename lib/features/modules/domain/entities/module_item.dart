@@ -40,6 +40,9 @@ class ContentPage {
     this.mediaUrl,
     this.mediaType,
     this.mediaPosition = 'below',
+
+    /// Ekranda gösterilmez; yalnızca sesli okuma için (PDF görüntü vb.).
+    this.narrationText,
   });
 
   final String title;
@@ -50,6 +53,9 @@ class ContentPage {
 
   /// API: `above` | `below` (ve `top`/`before` → above, `bottom`/`after` → below).
   final String mediaPosition;
+
+  /// Tam metin veya API’den gelen `narration_text` / `tts_text`.
+  final String? narrationText;
 }
 
 class ContentSection {

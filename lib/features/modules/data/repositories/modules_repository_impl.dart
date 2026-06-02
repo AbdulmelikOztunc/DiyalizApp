@@ -215,6 +215,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
         mediaUrl: _extractMediaUrl(page),
         mediaType: _extractMediaType(page),
         mediaPosition: _extractMediaPosition(page),
+        narrationText: _extractNarrationText(page),
         sections: sectionsRaw.map((s) => _mapContentSectionFromRaw(s)).toList(),
       );
     }
@@ -233,6 +234,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
           mediaUrl: _extractMediaUrl(detailMap),
           mediaType: _extractMediaType(detailMap),
           mediaPosition: _extractMediaPosition(detailMap),
+          narrationText: _extractNarrationText(detailMap),
           sections: _mapSectionsFromDetail(detailMap),
         );
       }
@@ -250,6 +252,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
       mediaUrl: _extractMediaUrl(page),
       mediaType: _extractMediaType(page),
       mediaPosition: _extractMediaPosition(page),
+      narrationText: _extractNarrationText(page),
       sections: fallbackBody.isEmpty
           ? const <ContentSection>[]
           : <ContentSection>[ContentSection(body: fallbackBody)],
@@ -532,6 +535,19 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return 'below';
     }
     return 'below';
+  }
+
+  String? _extractNarrationText(Map<String, dynamic> map) {
+    final raw = _toNullableStringValue(map, const [
+      'narrationText',
+      'narration_text',
+      'tts_text',
+      'ttsText',
+      'hidden_narration',
+      'speech_text',
+    ]);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return raw.trim();
   }
 
   List<dynamic> _extractSections(Map<String, dynamic> page) {
