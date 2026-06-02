@@ -70,11 +70,13 @@ class _ModulePageState extends ConsumerState<ModulePage> {
     if (mounted) setState(() {});
   }
 
-  void _clearBridgedPdf() {
+  void _detachBridgedPdf({bool rebuild = false}) {
     _bridgedPdfController?.pageListenable.removeListener(_onBridgedPdfPageChanged);
     _bridgedPdfController = null;
-    if (mounted) setState(() {});
+    if (rebuild && mounted) setState(() {});
   }
+
+  void _clearBridgedPdf() => _detachBridgedPdf(rebuild: true);
 
   @override
   void initState() {
@@ -111,7 +113,7 @@ class _ModulePageState extends ConsumerState<ModulePage> {
 
   @override
   void dispose() {
-    _clearBridgedPdf();
+    _detachBridgedPdf();
     unawaited(_tts.stop());
     _pageController.dispose();
     super.dispose();

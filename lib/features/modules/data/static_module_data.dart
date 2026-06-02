@@ -80,7 +80,7 @@ const kModule1Content = ModuleContent(
     ContentPage(
       title: kModule1PrimaryPageTitle,
       contentId: 'module1_pdf',
-      mediaUrl: 'assets/education/module1_bolum1.pdf',
+      mediaUrl: 'assets/education/module1.pdf',
       mediaType: 'pdf',
       mediaPosition: 'above',
       narrationText: kModule1HiddenNarrationForTts,
@@ -88,3 +88,27 @@ const kModule1Content = ModuleContent(
     ),
   ],
 );
+
+/// Modül 2: yerel PDF + API’den video (modül 1 ile aynı UX).
+const kModule2PrimaryPageTitle = 'Beslenme ve Sıvı Yönetimi';
+
+const kModule2Content = ModuleContent(
+  moduleId: '2',
+  title: 'Beslenme ve Sıvı Yönetimi',
+  contentPages: [
+    ContentPage(
+      title: kModule2PrimaryPageTitle,
+      contentId: 'module2_pdf',
+      mediaUrl: 'assets/education/module2.pdf',
+      mediaType: 'pdf',
+      mediaPosition: 'above',
+      sections: [],
+    ),
+  ],
+);
+
+/// Yerel PDF asset kullanan modüller (API içerik listesi yerine bu sayfalar gösterilir).
+const kLocalAssetPdfModules = <String, ModuleContent>{
+  '1': kModule1Content,
+  '2': kModule2Content,
+};

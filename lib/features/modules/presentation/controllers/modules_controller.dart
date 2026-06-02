@@ -34,16 +34,18 @@ String? _videoUrlFromApiModule(ModuleContent remote) {
   return null;
 }
 
-ModuleContent _module1MergedWithApi(ModuleContent remote) {
-  final title =
-      remote.title.trim().isNotEmpty ? remote.title : kModule1Content.title;
+ModuleContent _localPdfModuleMergedWithApi({
+  required ModuleContent local,
+  required ModuleContent remote,
+}) {
+  final title = remote.title.trim().isNotEmpty ? remote.title : local.title;
   final videoUrl =
-      _videoUrlFromApiModule(remote) ?? _pickNonEmptyUrl(kModule1Content.videoUrl);
+      _videoUrlFromApiModule(remote) ?? _pickNonEmptyUrl(local.videoUrl);
   return ModuleContent(
-    moduleId: '1',
+    moduleId: local.moduleId,
     title: title,
     videoUrl: videoUrl,
-    contentPages: kModule1Content.contentPages,
+    contentPages: local.contentPages,
   );
 }
 
@@ -107,13 +109,15 @@ final moduleContentProvider = FutureProvider.family<ModuleContent?, String>((
   ref,
   moduleId,
 ) async {
-  if (moduleId == '1') {
+  final localPdfModule = kLocalAssetPdfModules[moduleId];
+  if (localPdfModule != null) {
     final result = await ref
         .read(modulesRepositoryProvider)
         .getModuleContent(moduleId);
     return switch (result) {
-      ApiSuccess<ModuleContent>(:final data) => _module1MergedWithApi(data),
-      ApiFailure<ModuleContent>() => kModule1Content,
+      ApiSuccess<ModuleContent>(:final data) =>
+        _localPdfModuleMergedWithApi(local: localPdfModule, remote: data),
+      ApiFailure<ModuleContent>() => localPdfModule,
     };
   }
 
