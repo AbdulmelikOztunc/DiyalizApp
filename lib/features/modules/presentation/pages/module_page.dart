@@ -3,12 +3,9 @@ import 'dart:math' as math;
 
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
 import 'package:diyalizmobile/features/modules/presentation/controllers/modules_controller.dart';
-import 'package:diyalizmobile/features/modules/utils/pdf_asset_narration_text.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kDebugMode, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -19,6 +16,9 @@ const _deepPurple = Color(0xFF8B5CF6);
 const _lightPurple = Color(0xFFF3F0FF);
 const _mediumPurple = Color(0xFFE0D7FF);
 
+/// Geçici: metin sesli okuma (TTS) kapalı; sesler API’den PDF sayfasına göre gelir.
+const kModuleTtsEnabled = false;
+
 bool _pageUsesEmbeddedPdfAsset(ContentPage page) {
   final raw = page.mediaUrl?.trim() ?? '';
   if (raw.isEmpty) return false;
@@ -26,11 +26,6 @@ bool _pageUsesEmbeddedPdfAsset(ContentPage page) {
   final type = page.mediaType?.toLowerCase();
   if (type == 'pdf') return true;
   return raw.toLowerCase().endsWith('.pdf');
-}
-
-bool _pageHasHiddenNarration(ContentPage page) {
-  final t = page.narrationText?.trim();
-  return t != null && t.isNotEmpty;
 }
 
 bool _videoUrlLooksYoutube(String raw) {
@@ -49,17 +44,24 @@ class ModulePage extends ConsumerStatefulWidget {
 
 class _ModulePageState extends ConsumerState<ModulePage> {
   late final PageController _pageController;
-  late final FlutterTts _tts;
-  late final Future<void> _ttsReady;
   int _currentPage = 0;
-  bool _isSpeaking = false;
-  String? _speakingContentId;
 
   /// Yerel PDF açıkken alt çubuk bu denetleyiciyle sayfa ilerletir (PdfView kaydırması kapalı).
   PdfController? _bridgedPdfController;
 
+  /// API’den gelen sayfa sesleri (MP3; video_player ile arka planda çalınır).
+  VideoPlayerController? _pdfPageAudioController;
+  int? _activePdfPageAudioPage;
+  String? _activePdfPageAudioUrl;
+  int _pdfPageAudioSyncSeq = 0;
+  bool _pdfPageAudioPlaying = false;
+  bool _pdfPageAudioUserMuted = false;
+
   void _onBridgedPdfPageChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _pdfPageAudioUserMuted = false;
+    unawaited(_syncPdfPageAudio());
+    setState(() {});
   }
 
   void _setBridgedPdf(PdfController controller) {
@@ -67,217 +69,154 @@ class _ModulePageState extends ConsumerState<ModulePage> {
     _bridgedPdfController?.pageListenable.removeListener(_onBridgedPdfPageChanged);
     _bridgedPdfController = controller;
     controller.pageListenable.addListener(_onBridgedPdfPageChanged);
-    if (mounted) setState(() {});
+    if (mounted) {
+      unawaited(_syncPdfPageAudio());
+      setState(() {});
+    }
   }
 
   void _detachBridgedPdf({bool rebuild = false}) {
     _bridgedPdfController?.pageListenable.removeListener(_onBridgedPdfPageChanged);
     _bridgedPdfController = null;
+    unawaited(_stopPdfPageAudio());
     if (rebuild && mounted) setState(() {});
   }
 
-  void _clearBridgedPdf() => _detachBridgedPdf(rebuild: true);
+  void _clearBridgedPdf() => _detachBridgedPdf();
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    _tts = FlutterTts()
-      ..setStartHandler(() {
-        if (!mounted) return;
-        setState(() => _isSpeaking = true);
-      })
-      ..setCompletionHandler(() {
-        if (!mounted) return;
-        setState(() {
-          _isSpeaking = false;
-          _speakingContentId = null;
-        });
-      })
-      ..setCancelHandler(() {
-        if (!mounted) return;
-        setState(() {
-          _isSpeaking = false;
-          _speakingContentId = null;
-        });
-      })
-      ..setErrorHandler((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSpeaking = false;
-          _speakingContentId = null;
-        });
-      });
-    _ttsReady = _configureTts();
   }
 
   @override
   void dispose() {
+    _pdfPageAudioSyncSeq++;
     _detachBridgedPdf();
-    unawaited(_tts.stop());
+    unawaited(_stopPdfPageAudio());
     _pageController.dispose();
     super.dispose();
   }
 
-  Future<void> _configureTts() async {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      // Önce kategori, sonra setActive — ters sırada iOS'ta ses çıkmayabiliyor.
-      await _tts.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playback,
-        [
-          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
-          IosTextToSpeechAudioCategoryOptions.duckOthers,
-        ],
-        IosTextToSpeechAudioMode.spokenAudio,
-      );
-      await _tts.setSharedInstance(true);
-      // true iken utterance bitince session kapanıyor; sonraki speak sessiz kalabiliyor.
-      await _tts.autoStopSharedSession(false);
-    }
-
-    await _tts.setLanguage('tr-TR');
-    await _tts.setSpeechRate(0.52);
-    await _tts.setPitch(1.0);
-    await _tts.setVolume(1.0);
+  Future<void> _stopPdfPageAudio() async {
+    final controller = _pdfPageAudioController;
+    _pdfPageAudioController = null;
+    _activePdfPageAudioPage = null;
+    _activePdfPageAudioUrl = null;
+    _pdfPageAudioPlaying = false;
+    if (controller == null) return;
+    try {
+      await controller.pause();
+    } catch (_) {}
+    try {
+      await controller.dispose();
+    } catch (_) {}
   }
 
-  /// Android (ve bazı motorlar) uzun TAMAMEN BÜYÜK HARF kelimeleri kısaltma
-  /// sanıp harf harf okur. TTS için kelimeyi cümle biçimine çevirir.
-  static String _normalizeShoutingCapsForTts(String text) {
-    return text.replaceAllMapped(RegExp(r'\S+'), (m) {
-      final token = m.group(0)!;
-      final letters = token.characters.where((ch) {
-        final lower = ch.toLowerCase();
-        final upper = ch.toUpperCase();
-        return lower != upper;
-      }).join();
-      if (letters.length < 3) return token;
-      if (letters != letters.toUpperCase()) return token;
-
-      final lowerToken = token.toLowerCase();
-      if (lowerToken.isEmpty) return token;
-      final first = lowerToken.characters.first.toUpperCase();
-      final rest = lowerToken.characters.skip(1).join();
-      return '$first$rest';
-    });
+  PdfPageAudio? _pdfPageAudioForPage(ModuleContent content, int pdfPage) {
+    for (final audio in content.pdfPageAudios) {
+      if (audio.pdfPageNumber == pdfPage) return audio;
+    }
+    return null;
   }
 
-  static String _truncateForTts(String text, {int maxChars = 18000}) {
-    if (text.length <= maxChars) return text;
-    return '${text.substring(0, maxChars)}. Metin çok uzun; sesli okuma burada kesildi.';
-  }
+  Future<void> _syncPdfPageAudio({bool force = false}) async {
+    final syncSeq = ++_pdfPageAudioSyncSeq;
+    final ctrl = _bridgedPdfController;
+    if (ctrl == null) return;
+    if (ctrl.loadingState.value != PdfLoadingState.success) return;
 
-  Future<({String text, bool pdfTextLayerMissing})> _composeNarrationForPage(
-    ContentPage page,
-  ) async {
-    final hidden = page.narrationText?.trim();
-    if (hidden != null && hidden.isNotEmpty) {
-      final buffer = StringBuffer(page.title)
-        ..write('. ')
-        ..write(hidden);
-      final merged = buffer.toString().trim();
-      final clipped = _truncateForTts(merged);
-      final text = _normalizeShoutingCapsForTts(clipped);
-      return (text: text, pdfTextLayerMissing: false);
-    }
+    if (_pdfPageAudioUserMuted && !force) return;
 
-    final buffer = StringBuffer(page.title);
-    var pdfTextLayerMissing = false;
-
-    if (_pageUsesEmbeddedPdfAsset(page)) {
-      final pdfPlain =
-          await loadPdfAssetNarrationText(page.mediaUrl!.trim());
-      if (pdfPlain.isNotEmpty) {
-        buffer
-          ..write('. ')
-          ..write(pdfPlain);
-      } else {
-        pdfTextLayerMissing = true;
-      }
-    }
-
-    for (final section in page.sections) {
-      final heading = section.heading;
-      if (heading != null && heading.isNotEmpty) {
-        buffer
-          ..write('. ')
-          ..write(heading);
-      }
-
-      if (section.body.trim().isNotEmpty) {
-        buffer
-          ..write('. ')
-          ..write(section.body);
-      }
-
-      final points = section.keyPoints;
-      if (points != null && points.isNotEmpty) {
-        for (final point in points) {
-          buffer
-            ..write('. ')
-            ..write(point);
-        }
-      }
-
-      final after = section.bodyAfter;
-      if (after != null && after.trim().isNotEmpty) {
-        buffer
-          ..write('. ')
-          ..write(after);
-      }
-    }
-
-    final merged = buffer.toString().trim();
-    if (merged.isEmpty) {
-      return (text: '', pdfTextLayerMissing: pdfTextLayerMissing);
-    }
-    final clipped = _truncateForTts(merged);
-    final text = _normalizeShoutingCapsForTts(clipped);
-    return (text: text, pdfTextLayerMissing: pdfTextLayerMissing);
-  }
-
-  Future<void> _togglePageNarration(ContentPage page) async {
-    await _ttsReady;
-    if (_isSpeaking && _speakingContentId == page.contentId) {
-      await _tts.stop();
+    final content = ref.read(moduleContentProvider(widget.moduleId)).valueOrNull;
+    if (content == null || content.pdfPageAudios.isEmpty) {
+      await _stopPdfPageAudio();
       return;
     }
 
-    final result = await _composeNarrationForPage(page);
-    if (result.text.isEmpty) return;
+    final pdfPage = ctrl.page;
+    final target = _pdfPageAudioForPage(content, pdfPage);
+    if (target == null) {
+      await _stopPdfPageAudio();
+      return;
+    }
 
-    if (result.pdfTextLayerMissing &&
-        mounted &&
-        !_pageHasHiddenNarration(page)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'PDF içinde seçilebilir metin yok (sayfalar taranmış görüntü olabilir). '
-            'Sesli okuma yalnızca alttaki özet metinden devam eder.',
-            style: TextStyle(fontSize: 14),
+    if (_activePdfPageAudioPage == pdfPage &&
+        _activePdfPageAudioUrl == target.audioUrl &&
+        _pdfPageAudioController?.value.isPlaying == true) {
+      return;
+    }
+
+    await _stopPdfPageAudio();
+    if (!mounted || syncSeq != _pdfPageAudioSyncSeq) return;
+
+    final player = VideoPlayerController.networkUrl(Uri.parse(target.audioUrl));
+    _pdfPageAudioController = player;
+    _activePdfPageAudioPage = pdfPage;
+    _activePdfPageAudioUrl = target.audioUrl;
+
+    try {
+      await player.initialize();
+      if (!mounted ||
+          syncSeq != _pdfPageAudioSyncSeq ||
+          _pdfPageAudioController != player) {
+        await player.dispose();
+        return;
+      }
+      await player.setVolume(1);
+      await player.play();
+      if (!mounted ||
+          syncSeq != _pdfPageAudioSyncSeq ||
+          _pdfPageAudioController != player) {
+        return;
+      }
+      _pdfPageAudioPlaying = true;
+      if (mounted) setState(() {});
+      if (kDebugMode) {
+        debugPrint(
+          '[PdfPageAudio] Sayfa $pdfPage sesi çalıyor: ${target.title ?? target.audioUrl}',
+        );
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[PdfPageAudio] Yüklenemedi (sayfa $pdfPage): $error');
+      }
+      if (_pdfPageAudioController == player) {
+        await _stopPdfPageAudio();
+      } else {
+        try {
+          await player.dispose();
+        } catch (_) {}
+      }
+      if (mounted && syncSeq == _pdfPageAudioSyncSeq) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Sayfa $pdfPage sesi yüklenemedi.',
+              style: const TextStyle(fontSize: 14),
+            ),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: _darkPurple.withValues(alpha: 0.95),
           ),
-          duration: const Duration(seconds: 5),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: _darkPurple.withValues(alpha: 0.95),
-        ),
-      );
+        );
+      }
+    }
+  }
+
+  Future<void> _togglePdfPageAudio() async {
+    if (_pdfPageAudioPlaying) {
+      _pdfPageAudioUserMuted = true;
+      _pdfPageAudioSyncSeq++;
+      await _stopPdfPageAudio();
+      if (mounted) setState(() {});
+      return;
     }
 
-    if (kDebugMode &&
-        _pageUsesEmbeddedPdfAsset(page) &&
-        !_pageHasHiddenNarration(page)) {
-      debugPrint(
-        '[TTS] PDF katmanı: ${result.pdfTextLayerMissing ? "yok veya boş" : "metin çıkarıldı"}; '
-        'konuşma metni ${result.text.length} karakter',
-      );
-    }
-
-    await _tts.stop();
-    setState(() => _speakingContentId = page.contentId);
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      await _tts.setSharedInstance(true);
-    }
-    await _tts.speak(result.text, focus: true);
+    _pdfPageAudioUserMuted = false;
+    await _syncPdfPageAudio(force: true);
+    if (mounted) setState(() {});
   }
 
   void _goToPage(int page) {
@@ -376,7 +315,9 @@ class _ModulePageState extends ConsumerState<ModulePage> {
             controller: _pageController,
             itemCount: totalPages,
             onPageChanged: (page) {
-              unawaited(_tts.stop());
+              _pdfPageAudioSyncSeq++;
+              _pdfPageAudioUserMuted = false;
+              unawaited(_stopPdfPageAudio());
               if (page > _currentPage) {
                 _sendProgress(pageIndex: _currentPage, content: content);
               }
@@ -387,11 +328,15 @@ class _ModulePageState extends ConsumerState<ModulePage> {
                 return _VideoPageView(videoUrl: content.videoUrl!);
               }
               final contentPage = content.contentPages[index];
+              final showPdfAudioControl =
+                  _pageUsesEmbeddedPdfAsset(contentPage) &&
+                  content.pdfPageAudios.isNotEmpty;
               return _ContentPageView(
                 page: contentPage,
-                isReading:
-                    _isSpeaking && _speakingContentId == contentPage.contentId,
-                onToggleRead: () => _togglePageNarration(contentPage),
+                showPdfPageAudioControl: showPdfAudioControl,
+                isPdfPageAudioPlaying: _pdfPageAudioPlaying,
+                isPdfPageAudioMuted: _pdfPageAudioUserMuted,
+                onPdfPageAudioToggle: _togglePdfPageAudio,
                 onPdfBridgeAttach: _setBridgedPdf,
                 onPdfBridgeDetach: _clearBridgedPdf,
               );
@@ -621,8 +566,10 @@ class _PageIndicator extends StatelessWidget {
 class _ContentPageView extends StatelessWidget {
   const _ContentPageView({
     required this.page,
-    required this.isReading,
-    required this.onToggleRead,
+    this.showPdfPageAudioControl = false,
+    this.isPdfPageAudioPlaying = false,
+    this.isPdfPageAudioMuted = false,
+    this.onPdfPageAudioToggle,
     this.onPdfBridgeAttach,
     this.onPdfBridgeDetach,
   });
@@ -630,8 +577,10 @@ class _ContentPageView extends StatelessWidget {
   static const double _horizontalInset = 20;
 
   final ContentPage page;
-  final bool isReading;
-  final VoidCallback onToggleRead;
+  final bool showPdfPageAudioControl;
+  final bool isPdfPageAudioPlaying;
+  final bool isPdfPageAudioMuted;
+  final VoidCallback? onPdfPageAudioToggle;
   final void Function(PdfController controller)? onPdfBridgeAttach;
   final VoidCallback? onPdfBridgeDetach;
 
@@ -682,8 +631,10 @@ class _ContentPageView extends StatelessWidget {
           useExternalPageNavigation: onPdfBridgeAttach != null,
           onBridgeAttach: onPdfBridgeAttach,
           onBridgeDetach: onPdfBridgeDetach,
-          onNarrationTap: onToggleRead,
-          isNarrating: isReading,
+          showPageAudioControl: showPdfPageAudioControl,
+          isPageAudioPlaying: isPdfPageAudioPlaying,
+          isPageAudioMuted: isPdfPageAudioMuted,
+          onPageAudioToggle: onPdfPageAudioToggle,
         ),
       );
     }
@@ -739,43 +690,13 @@ class _ContentPageView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  page.title,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A2E),
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton.filledTonal(
-                onPressed: onToggleRead,
-                icon: Icon(
-                  isReading ? Icons.stop_rounded : Icons.volume_up_rounded,
-                  size: 20,
-                ),
-                tooltip: isReading ? 'Sesli okumayı durdur' : 'Sesli oku',
-                style: IconButton.styleFrom(
-                  foregroundColor: _darkPurple,
-                  backgroundColor: _lightPurple,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           Text(
-            isReading
-                ? 'Sesli okunuyor...'
-                : 'İçeriği sesli dinlemek için butona basın',
+            page.title,
             style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF6B7280),
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+              height: 1.3,
             ),
           ),
           const SizedBox(height: 6),
@@ -904,21 +825,25 @@ class _InlinePdfAsset extends StatefulWidget {
     required this.assetPath,
     required this.width,
     required this.height,
-    required this.onNarrationTap,
-    required this.isNarrating,
     this.useExternalPageNavigation = false,
     this.onBridgeAttach,
     this.onBridgeDetach,
+    this.showPageAudioControl = false,
+    this.isPageAudioPlaying = false,
+    this.isPageAudioMuted = false,
+    this.onPageAudioToggle,
   });
 
   final String assetPath;
   final double width;
   final double height;
-  final VoidCallback onNarrationTap;
-  final bool isNarrating;
   final bool useExternalPageNavigation;
   final void Function(PdfController controller)? onBridgeAttach;
   final VoidCallback? onBridgeDetach;
+  final bool showPageAudioControl;
+  final bool isPageAudioPlaying;
+  final bool isPageAudioMuted;
+  final VoidCallback? onPageAudioToggle;
 
   @override
   State<_InlinePdfAsset> createState() => _InlinePdfAssetState();
@@ -1100,31 +1025,34 @@ class _InlinePdfAssetState extends State<_InlinePdfAsset> {
                 ),
               ),
             ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Material(
-                color: Colors.white.withValues(alpha: 0.88),
-                elevation: 0,
-                shape: CircleBorder(
-                  side: BorderSide(color: Colors.grey.shade300),
-                ),
-                child: IconButton(
-                  onPressed: widget.onNarrationTap,
-                  tooltip: widget.isNarrating
-                      ? 'Sesli okumayı durdur'
-                      : 'Sesli oku',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    widget.isNarrating
-                        ? Icons.stop_rounded
-                        : Icons.volume_up_rounded,
-                    size: 22,
+            if (widget.showPageAudioControl && widget.onPageAudioToggle != null)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.88),
+                  elevation: 0,
+                  shape: CircleBorder(
+                    side: BorderSide(color: Colors.grey.shade300),
                   ),
-                  color: _darkPurple,
+                  child: IconButton(
+                    onPressed: widget.onPageAudioToggle,
+                    tooltip: widget.isPageAudioPlaying
+                        ? 'Sesi kapat'
+                        : 'Sesi aç',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      widget.isPageAudioPlaying
+                          ? Icons.volume_up_rounded
+                          : Icons.volume_off_rounded,
+                      size: 22,
+                    ),
+                    color: widget.isPageAudioPlaying
+                        ? _darkPurple
+                        : _darkPurple.withValues(alpha: 0.55),
+                  ),
                 ),
               ),
-            ),
             Positioned(
               top: 8,
               right: 8,

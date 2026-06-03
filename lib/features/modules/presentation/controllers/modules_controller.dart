@@ -15,7 +15,52 @@ String? _pickNonEmptyUrl(String? raw) {
   return t;
 }
 
-/// Önce modül kökü `videoUrl`, yoksa API’nin son içerik kaydı (birinci modülde video genelde burada).
+bool _contentPageIsAudio(ContentPage page) {
+  final type = page.mediaType?.toLowerCase();
+  if (type == 'audio' || type == 'ses' || type == 'sound') return true;
+  final url = page.mediaUrl?.toLowerCase() ?? '';
+  return url.endsWith('.mp3') ||
+      url.endsWith('.wav') ||
+      url.endsWith('.m4a') ||
+      url.endsWith('.aac') ||
+      url.endsWith('.ogg');
+}
+
+bool _contentPageIsVideo(ContentPage page) {
+  final type = page.mediaType?.toLowerCase();
+  if (type == 'video') return true;
+  if (_contentPageIsAudio(page)) return false;
+  final mediaUrl = page.mediaUrl?.toLowerCase() ?? '';
+  return mediaUrl.endsWith('.mp4') ||
+      mediaUrl.endsWith('.mov') ||
+      mediaUrl.endsWith('.m3u8') ||
+      mediaUrl.endsWith('.webm') ||
+      mediaUrl.contains('youtube.com') ||
+      mediaUrl.contains('youtu.be');
+}
+
+List<PdfPageAudio> _pdfPageAudiosFromRemote(ModuleContent remote) {
+  final audios = <PdfPageAudio>[];
+  for (final page in remote.contentPages) {
+    if (!_contentPageIsAudio(page)) continue;
+    final url = _pickNonEmptyUrl(page.mediaUrl);
+    if (url == null) continue;
+    final pageNum = page.sortOrder;
+    if (pageNum == null || pageNum < 1) continue;
+    audios.add(
+      PdfPageAudio(
+        pdfPageNumber: pageNum,
+        audioUrl: url,
+        contentId: page.contentId,
+        title: page.title,
+      ),
+    );
+  }
+  audios.sort((a, b) => a.pdfPageNumber.compareTo(b.pdfPageNumber));
+  return audios;
+}
+
+/// Önce modül kökü `videoUrl`, yoksa API’nin son video içeriği.
 String? _videoUrlFromApiModule(ModuleContent remote) {
   final top = _pickNonEmptyUrl(remote.videoUrl);
   if (top != null) return top;
@@ -23,11 +68,8 @@ String? _videoUrlFromApiModule(ModuleContent remote) {
   final pages = remote.contentPages;
   if (pages.isEmpty) return null;
 
-  final lastUrl = _pickNonEmptyUrl(pages.last.mediaUrl);
-  if (lastUrl != null) return lastUrl;
-
-  // Son kayıtta medya yoksa geriye doğru ilk dolu medya URL’si (yedek).
-  for (var i = pages.length - 2; i >= 0; i--) {
+  for (var i = pages.length - 1; i >= 0; i--) {
+    if (!_contentPageIsVideo(pages[i])) continue;
     final url = _pickNonEmptyUrl(pages[i].mediaUrl);
     if (url != null) return url;
   }
@@ -41,11 +83,20 @@ ModuleContent _localPdfModuleMergedWithApi({
   final title = remote.title.trim().isNotEmpty ? remote.title : local.title;
   final videoUrl =
       _videoUrlFromApiModule(remote) ?? _pickNonEmptyUrl(local.videoUrl);
+  final pdfPageAudios = _pdfPageAudiosFromRemote(remote);
+  if (pdfPageAudios.isNotEmpty && kDebugMode) {
+    debugPrint(
+      '[ModulesController] Modül ${local.moduleId}: '
+      '${pdfPageAudios.length} PDF sayfa sesi API’den alındı '
+      '(sayfalar: ${pdfPageAudios.map((a) => a.pdfPageNumber).join(", ")})',
+    );
+  }
   return ModuleContent(
     moduleId: local.moduleId,
     title: title,
     videoUrl: videoUrl,
     contentPages: local.contentPages,
+    pdfPageAudios: pdfPageAudios,
   );
 }
 

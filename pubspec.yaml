@@ -40,7 +40,6 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   shared_preferences: ^2.5.3
   youtube_player_iframe: ^5.2.2
-  flutter_tts: ^4.2.5
   video_player: ^2.11.1
   pdfx: ^2.9.2
 
@@ -70,6 +69,10 @@ flutter:
   assets:
     - assets/education/module1.pdf
     - assets/education/module2.pdf
+    - assets/education/module3.pdf
+    - assets/education/module4.pdf
+    - assets/education/module5.pdf
+    - assets/education/module6.pdf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

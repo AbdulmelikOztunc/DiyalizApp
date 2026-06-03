@@ -202,6 +202,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
     required Map<String, dynamic> page,
   }) async {
     final contentId = _toNullableStringValue(page, const ['id', 'content_id']);
+    final sortOrder = _extractSortOrder(page, fallbackIndex: index);
     final title = _toStringValue(page, const [
       'title',
       'page_title',
@@ -212,6 +213,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
       return ContentPage(
         contentId: contentId,
         title: title,
+        sortOrder: sortOrder,
         mediaUrl: _extractMediaUrl(page),
         mediaType: _extractMediaType(page),
         mediaPosition: _extractMediaPosition(page),
@@ -231,6 +233,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
             'title',
             'name',
           ], fallback: title),
+          sortOrder: _extractSortOrder(detailMap, fallbackIndex: sortOrder ?? index),
           mediaUrl: _extractMediaUrl(detailMap),
           mediaType: _extractMediaType(detailMap),
           mediaPosition: _extractMediaPosition(detailMap),
@@ -249,6 +252,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
     return ContentPage(
       contentId: contentId,
       title: title,
+      sortOrder: sortOrder,
       mediaUrl: _extractMediaUrl(page),
       mediaType: _extractMediaType(page),
       mediaPosition: _extractMediaPosition(page),
@@ -470,6 +474,21 @@ class ModulesRepositoryImpl implements ModulesRepository {
     return text.trim();
   }
 
+  int? _extractSortOrder(
+    Map<String, dynamic> map, {
+    required int fallbackIndex,
+  }) {
+    final raw = map['sort_order'] ??
+        map['sortOrder'] ??
+        map['sira'] ??
+        map['order'] ??
+        map['page_number'] ??
+        map['pageNumber'];
+    if (raw == null) return fallbackIndex + 1;
+    final parsed = _toInt(raw);
+    return parsed > 0 ? parsed : fallbackIndex + 1;
+  }
+
   String? _extractMediaUrl(Map<String, dynamic> map) {
     final raw = _toNullableStringValue(map, const [
       'media_file',
@@ -482,15 +501,15 @@ class ModulesRepositoryImpl implements ModulesRepository {
 
     final normalized = raw.trim();
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-      return Uri.encodeFull(normalized);
+      return Uri.parse(normalized).toString();
     }
     if (normalized.startsWith('//')) {
-      return Uri.encodeFull('http:$normalized');
+      return Uri.parse('http:$normalized').toString();
     }
 
     final mediaRootUri = Uri.parse(_mediaRootUrl);
     final path = normalized.startsWith('/') ? normalized : '/$normalized';
-    return Uri.encodeFull(mediaRootUri.resolve(path).toString());
+    return mediaRootUri.resolve(path).toString();
   }
 
   String? _extractMediaType(Map<String, dynamic> map) {
@@ -500,13 +519,26 @@ class ModulesRepositoryImpl implements ModulesRepository {
       'type',
     ]);
     if (explicitType != null && explicitType.isNotEmpty) {
-      return explicitType.toLowerCase();
+      final normalized = explicitType.toLowerCase();
+      if (normalized == 'ses' ||
+          normalized == 'audio' ||
+          normalized == 'sound') {
+        return 'audio';
+      }
+      return normalized;
     }
 
     final mediaUrl = _extractMediaUrl(map);
     if (mediaUrl == null) return null;
     final uri = Uri.tryParse(mediaUrl);
     final path = (uri?.path ?? mediaUrl).toLowerCase();
+    if (path.endsWith('.mp3') ||
+        path.endsWith('.wav') ||
+        path.endsWith('.m4a') ||
+        path.endsWith('.aac') ||
+        path.endsWith('.ogg')) {
+      return 'audio';
+    }
     if (path.endsWith('.mp4') ||
         path.endsWith('.mov') ||
         path.endsWith('.m3u8') ||

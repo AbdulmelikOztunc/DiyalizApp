@@ -45,10 +45,10 @@ const kStaticModules = <ModuleItem>[
   ),
 ];
 
-/// Modül 1 ilk sekme başlığı (PDF üstündeki başlıkla uyumlu).
+/// Modül 1 PDF sayfa başlığı (üst başlık metniyle uyumlu).
 const kModule1PrimaryPageTitle = 'Böbreklerimizi Tanıyalım';
 
-/// Ekranda gösterilmez; yalnızca sesli okuma. PDF metin katmanı + kutularda yalnızca görsel olan bölümler elle eklenmiştir.
+/// Ekranda gösterilmez; yalnızca sesli okuma (modül 1).
 const kModule1HiddenNarrationForTts = '''
 Böbreklerimiz, belimizin arka kısmında yer alan ve kuru fasulye şeklinde olan iki adet organdır.
 
@@ -71,44 +71,40 @@ Bildiğiniz gibi kemiklerimiz vücudumuzu ayakta tutan ve hareketimizi sağlayan
 Böbreklerimiz bu görevlerini yapamaz hale gelirse zararlı atık maddeler vücutta birikir ve zehirlenmeler olabilir.
 ''';
 
-/// Modül 1: tek içerik sayfası (PDF) + video sekmesi `videoUrl` ile.
-const kModule1Content = ModuleContent(
-  moduleId: '1',
-  title: 'Böbrek ve Hemodiyaliz',
-  videoUrl: 'https://www.youtube.com/watch?v=mI7u1wazvDU',
-  contentPages: [
-    ContentPage(
-      title: kModule1PrimaryPageTitle,
-      contentId: 'module1_pdf',
-      mediaUrl: 'assets/education/module1.pdf',
-      mediaType: 'pdf',
-      mediaPosition: 'above',
-      narrationText: kModule1HiddenNarrationForTts,
-      sections: [],
-    ),
-  ],
-);
+ModuleItem _staticModule(String id) =>
+    kStaticModules.firstWhere((m) => m.id == id);
 
-/// Modül 2: yerel PDF + API’den video (modül 1 ile aynı UX).
-const kModule2PrimaryPageTitle = 'Beslenme ve Sıvı Yönetimi';
+String _localPdfPageTitle(String moduleId) {
+  if (moduleId == '1') return kModule1PrimaryPageTitle;
+  return _staticModule(moduleId).title;
+}
 
-const kModule2Content = ModuleContent(
-  moduleId: '2',
-  title: 'Beslenme ve Sıvı Yönetimi',
-  contentPages: [
-    ContentPage(
-      title: kModule2PrimaryPageTitle,
-      contentId: 'module2_pdf',
-      mediaUrl: 'assets/education/module2.pdf',
-      mediaType: 'pdf',
-      mediaPosition: 'above',
-      sections: [],
-    ),
-  ],
-);
+ModuleContent _localPdfModuleContent(String moduleId) {
+  final module = _staticModule(moduleId);
+  return ModuleContent(
+    moduleId: moduleId,
+    title: module.title,
+    videoUrl: moduleId == '1'
+        ? 'https://www.youtube.com/watch?v=mI7u1wazvDU'
+        : null,
+    contentPages: [
+      ContentPage(
+        title: _localPdfPageTitle(moduleId),
+        contentId: 'module${moduleId}_pdf',
+        mediaUrl: 'assets/education/module$moduleId.pdf',
+        mediaType: 'pdf',
+        mediaPosition: 'above',
+        narrationText: null,
+        sections: const [],
+      ),
+    ],
+  );
+}
 
-/// Yerel PDF asset kullanan modüller (API içerik listesi yerine bu sayfalar gösterilir).
-const kLocalAssetPdfModules = <String, ModuleContent>{
-  '1': kModule1Content,
-  '2': kModule2Content,
+/// Tüm modüller: `assets/education/module{N}.pdf` + API’den başlık/video.
+final kLocalAssetPdfModules = <String, ModuleContent>{
+  for (final m in kStaticModules) m.id: _localPdfModuleContent(m.id),
 };
+
+/// API hatasında modül 1 yedek içerik (geriye dönük).
+ModuleContent get kModule1Content => kLocalAssetPdfModules['1']!;
