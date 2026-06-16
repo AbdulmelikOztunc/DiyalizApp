@@ -1,3 +1,4 @@
+import 'package:diyalizmobile/core/constants/api_config.dart';
 import 'package:diyalizmobile/core/network/api_result.dart';
 import 'package:diyalizmobile/features/modules/data/datasources/modules_remote_data_source.dart';
 import 'package:diyalizmobile/features/modules/domain/entities/module_item.dart';
@@ -7,7 +8,7 @@ class ModulesRepositoryImpl implements ModulesRepository {
   ModulesRepositoryImpl(this._remoteDataSource);
 
   final ModulesRemoteDataSource _remoteDataSource;
-  static const _mediaRootUrl = 'http://diyalizapp.com.tr';
+  static const _mediaRootUrl = ApiConfig.mediaRootUrl;
 
   @override
   Future<ApiResult<ModuleContent>> getModuleContent(String moduleId) async {
@@ -500,16 +501,27 @@ class ModulesRepositoryImpl implements ModulesRepository {
     if (raw == null || raw.isEmpty) return null;
 
     final normalized = raw.trim();
+    String? resolved;
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-      return Uri.parse(normalized).toString();
+      resolved = Uri.parse(normalized).toString();
+    } else if (normalized.startsWith('//')) {
+      resolved = Uri.parse('https:$normalized').toString();
+    } else {
+      final mediaRootUri = Uri.parse(_mediaRootUrl);
+      final path = normalized.startsWith('/') ? normalized : '/$normalized';
+      resolved = mediaRootUri.resolve(path).toString();
     }
-    if (normalized.startsWith('//')) {
-      return Uri.parse('http:$normalized').toString();
-    }
+    return _upgradeToHttps(resolved);
+  }
 
-    final mediaRootUri = Uri.parse(_mediaRootUrl);
-    final path = normalized.startsWith('/') ? normalized : '/$normalized';
-    return mediaRootUri.resolve(path).toString();
+  String _upgradeToHttps(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    if (uri.scheme != 'http') return url;
+    if (uri.host != ApiConfig.host && !uri.host.endsWith('.${ApiConfig.host}')) {
+      return url;
+    }
+    return uri.replace(scheme: 'https').toString();
   }
 
   String? _extractMediaType(Map<String, dynamic> map) {

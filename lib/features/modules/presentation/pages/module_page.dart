@@ -1150,6 +1150,88 @@ class _InlinePdfAssetState extends State<_InlinePdfAsset> {
   }
 }
 
+/// Ağ videosu: tam alanı doldurur, üstüne ek gölge/overlay koymaz.
+class _NetworkVideoPlayer extends StatefulWidget {
+  const _NetworkVideoPlayer({required this.controller});
+
+  final VideoPlayerController controller;
+
+  @override
+  State<_NetworkVideoPlayer> createState() => _NetworkVideoPlayerState();
+}
+
+class _NetworkVideoPlayerState extends State<_NetworkVideoPlayer> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerUpdated);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerUpdated);
+    super.dispose();
+  }
+
+  void _onControllerUpdated() {
+    if (mounted) setState(() {});
+  }
+
+  void _togglePlayPause() {
+    final controller = widget.controller;
+    if (!controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final size = controller.value.size;
+    final videoWidth = size.width > 0 ? size.width : 16.0;
+    final videoHeight = size.height > 0 ? size.height : 9.0;
+    final isPlaying = controller.value.isPlaying;
+
+    return GestureDetector(
+      onTap: _togglePlayPause,
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          ClipRect(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: videoWidth,
+                height: videoHeight,
+                child: VideoPlayer(controller),
+              ),
+            ),
+          ),
+          if (!isPlaying)
+            IconButton.filled(
+              onPressed: _togglePlayPause,
+              icon: const Icon(Icons.play_arrow_rounded, size: 28),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black54,
+                foregroundColor: Colors.white,
+                shape: const StadiumBorder(),
+                minimumSize: const Size(56, 40),
+                fixedSize: const Size(56, 40),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InlineNetworkVideo extends StatefulWidget {
   const _InlineNetworkVideo({required this.mediaUrl});
 
@@ -1180,17 +1262,6 @@ class _InlineNetworkVideoState extends State<_InlineNetworkVideo> {
     super.dispose();
   }
 
-  void _togglePlayPause() {
-    if (!_controller.value.isInitialized) return;
-    setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
-      } else {
-        _controller.play();
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1198,7 +1269,7 @@ class _InlineNetworkVideoState extends State<_InlineNetworkVideo> {
         border: Border.symmetric(
           horizontal: BorderSide(color: _mediumPurple.withValues(alpha: 0.35)),
         ),
-        color: Colors.black,
+        color: _lightPurple,
       ),
       child: FutureBuilder<void>(
         future: _initializeFuture,
@@ -1228,29 +1299,11 @@ class _InlineNetworkVideoState extends State<_InlineNetworkVideo> {
             );
           }
 
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              AspectRatio(
-                aspectRatio: _controller.value.aspectRatio == 0
-                    ? 16 / 9
-                    : _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
-              ),
-              IconButton.filled(
-                onPressed: _togglePlayPause,
-                icon: Icon(
-                  _controller.value.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  size: 28,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black54,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
+          return AspectRatio(
+            aspectRatio: _controller.value.aspectRatio == 0
+                ? 16 / 9
+                : _controller.value.aspectRatio,
+            child: _NetworkVideoPlayer(controller: _controller),
           );
         },
       ),
@@ -1468,68 +1521,36 @@ class _VideoPageViewState extends State<_VideoPageView> {
     return SizedBox(
       width: double.infinity,
       height: playerHeight,
-      child: ColoredBox(
-        color: Colors.black,
-        child: FutureBuilder<void>(
-          future: _networkVideoInitFuture,
-          builder: (context, snapshot) {
-            if (_networkVideoError || snapshot.hasError) {
-              return const Center(
+      child: FutureBuilder<void>(
+        future: _networkVideoInitFuture,
+        builder: (context, snapshot) {
+          if (_networkVideoError || snapshot.hasError) {
+            return ColoredBox(
+              color: _lightPurple,
+              child: const Center(
                 child: Text(
                   'Video yüklenemedi',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: _darkPurple,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-              );
-            }
-            if (snapshot.connectionState != ConnectionState.done ||
-                !ctrl.value.isInitialized) {
-              return const Center(
-                child: CircularProgressIndicator(color: _primaryPurple),
-              );
-            }
-
-            return Stack(
-              alignment: Alignment.center,
-              fit: StackFit.expand,
-              children: [
-                Center(
-                  child: AspectRatio(
-                    aspectRatio: ctrl.value.aspectRatio == 0
-                        ? _playerAspect
-                        : ctrl.value.aspectRatio,
-                    child: VideoPlayer(ctrl),
-                  ),
-                ),
-                IconButton.filled(
-                  onPressed: () {
-                    if (!ctrl.value.isInitialized) return;
-                    setState(() {
-                      if (ctrl.value.isPlaying) {
-                        ctrl.pause();
-                      } else {
-                        ctrl.play();
-                      }
-                    });
-                  },
-                  icon: Icon(
-                    ctrl.value.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 28,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black54,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
+              ),
             );
-          },
-        ),
+          }
+          if (snapshot.connectionState != ConnectionState.done ||
+              !ctrl.value.isInitialized) {
+            return const ColoredBox(
+              color: _lightPurple,
+              child: Center(
+                child: CircularProgressIndicator(color: _primaryPurple),
+              ),
+            );
+          }
+
+          return _NetworkVideoPlayer(controller: ctrl);
+        },
       ),
     );
   }
@@ -1578,20 +1599,7 @@ class _VideoPageViewState extends State<_VideoPageView> {
               const SizedBox(height: 20),
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _primaryPurple.withValues(alpha: 0.15),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: _buildPlayer(playerHeight),
-                ),
+                child: _buildPlayer(playerHeight),
               ),
               const SizedBox(height: 24),
               Container(

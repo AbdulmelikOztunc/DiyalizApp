@@ -72,6 +72,16 @@ class ApiClient {
     final body = e.response?.data;
     String? code;
     String message = e.message ?? 'Beklenmeyen bir hata oluştu';
+
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.unknown) {
+      message = 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edin.';
+    } else if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      message = 'Sunucu yanıt vermedi. Lütfen tekrar deneyin.';
+    }
+
     if (body is Map<String, dynamic>) {
       code = body['code'] as String?;
       message = (body['message'] as String?) ?? message;

@@ -1,6 +1,7 @@
 import 'package:diyalizmobile/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:diyalizmobile/features/auth/presentation/utils/tr_national_phone_input_formatter.dart';
 import 'package:diyalizmobile/features/auth/presentation/widgets/glass_auth_widgets.dart';
+import 'package:diyalizmobile/features/auth/presentation/widgets/legal_notice_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -216,6 +217,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                                         }
                                       },
                                     ),
+                                    const SizedBox(height: 16),
+                                    const LegalNoticeText(),
                                     const SizedBox(height: 18),
                                     AuthPrimaryButton(
                                       label: 'Kayıt Ol',

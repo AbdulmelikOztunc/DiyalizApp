@@ -1,3 +1,4 @@
+import 'package:diyalizmobile/core/constants/api_config.dart';
 import 'package:diyalizmobile/core/network/api_client.dart';
 import 'package:diyalizmobile/core/network/auth_interceptor.dart';
 import 'package:diyalizmobile/core/storage/secure_storage_service.dart';
@@ -17,9 +18,7 @@ final dioProvider = Provider<Dio>((ref) {
   final storage = ref.watch(secureStorageServiceProvider);
   final dio = Dio(
     BaseOptions(
-      baseUrl:
-      'http://diyalizapp.com.tr/Diyaliz_App/api/v1/',
-          //'https://lawngreen-turkey-839921.hostingersite.com/Diyaliz_App/api/v1/',
+      baseUrl: ApiConfig.baseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       sendTimeout: const Duration(seconds: 15),
